@@ -40,6 +40,29 @@ abstract class AdaptiveProvider : MainAPI() {
     private suspend fun fetch(url: String, referer: String? = null): Document =
         app.get(url, referer = referer ?: "$mainUrl/", interceptor = cf).document
 
+    /**
+     * Khusus loadLinks: coba lewat CloudflareKiller, lalu tanpa interceptor. Setiap langkah
+     * dicatat ke [log] supaya penyebab gagal kelihatan di logcat (tag AdaptiveProvider).
+     */
+    private suspend fun fetchLoud(url: String, referer: String?, log: MutableList<String>): Document? {
+        val ref = referer ?: "$mainUrl/"
+        try {
+            val r = app.get(url, referer = ref, interceptor = cf)
+            log.add("fetch cf: HTTP ${r.code} ${r.text.length}B")
+            if (r.code in 200..299) return r.document
+        } catch (e: Exception) {
+            log.add("fetch cf: ${e.javaClass.simpleName} ${e.message?.take(60)}")
+        }
+        try {
+            val r = app.get(url, referer = ref)
+            log.add("fetch polos: HTTP ${r.code} ${r.text.length}B")
+            if (r.code in 200..299) return r.document
+        } catch (e: Exception) {
+            log.add("fetch polos: ${e.javaClass.simpleName} ${e.message?.take(60)}")
+        }
+        return null
+    }
+
     private fun safeSelect(root: Element, sel: String): List<Element> {
         if (sel.isBlank()) return emptyList()
         return try {
@@ -536,6 +559,9 @@ abstract class AdaptiveProvider : MainAPI() {
     private fun addEmbed(raw: String, pageUrl: String, out: MutableSet<String>) {
         val v = raw.trim()
         if (v.isEmpty()) return
+        // nilai polos (mis. value option "kuramadrive") bukan URL: jangan dijadikan URL relatif palsu
+        val plain = !v.startsWith("<") && !v.startsWith("http") && !v.startsWith("/")
+        if (plain && tryBase64(v) == null && !v.contains('/') && !v.contains('.')) return
         val html: String? = when {
             v.startsWith("<") -> v
             v.startsWith("http") || v.startsWith("//") || v.startsWith("/") -> null
@@ -764,10 +790,15 @@ abstract class AdaptiveProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val doc = fetch(data)
         val seen = HashSet<String>()      // URL yang sudah dikirim ke aplikasi
         val visited = HashSet<String>()   // embed yang sudah dibuka
         val log = ArrayList<String>()     // jejak diagnosis (logcat + pesan error)
+        Log.d("AdaptiveProvider", "loadLinks [$name] $data")
+        val doc = fetchLoud(data, null, log) ?: run {
+            val msg = "Gagal membuka halaman [$name] " + log.joinToString(" | ")
+            Log.e("AdaptiveProvider", msg)
+            throw ErrorLoadingException(msg.take(600))
+        }
         var ok = pageSources(doc, data, name, callback, seen)
 
         val embeds = collectEmbeds(doc, data)
@@ -827,7 +858,7 @@ abstract class AdaptiveProvider : MainAPI() {
 
         if (!ok) {
             val msg = "Tautan tidak ditemukan [$name] " + log.joinToString(" | ")
-            Log.d("AdaptiveProvider", msg)
+            Log.e("AdaptiveProvider", msg)
             throw ErrorLoadingException(msg.take(600))
         }
         return true
