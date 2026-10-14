@@ -1,0 +1,4 @@
+# Opsional. Jenis template untuk plugin BARU yang dibuat otomatis.
+# Format:  NamaFolder: anime | movie      (kalau tidak ditulis, dianggap anime)
+# Contoh:
+# NontonFilmProvider: movie

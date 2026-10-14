@@ -1,0 +1,9 @@
+# Domain aktif tiap provider. Diperbarui otomatis oleh check_domains.py
+# dan diterapkan ke source Kotlin oleh apply_domains.py.
+# Format:  NamaFolder: https://domain
+# GANTI dengan domain yang sedang aktif sebelum push pertama.
+AnimeSailProvider: https://animesail.example
+KuramanimeProvider: https://kuramanime.example
+OtakudesuProvider: https://otakudesu.example
+LayarKaca21Provider: https://layarkaca21.example
+SflixProvider: https://sflix.example
