@@ -8,5 +8,4 @@ Dibuat otomatis oleh `detect_selectors.py`. Tanda ❌ berarti perlu disetel manu
 Tidak diproses / gagal:
 
 - **AnimeSailProvider**: dikunci manual
-- **KuronimeProvider**: belum waktunya (terakhir 2026-10-14)
-- **LayarKaca21Provider**: diblokir bot (Cloudflare?), tidak bisa dideteksi otomatis
+- **SflixProvider**: gagal: daftar item tidak ditemukan (kemungkinan dimuat lewat JavaScript)
