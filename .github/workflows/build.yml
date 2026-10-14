@@ -11,7 +11,7 @@ on:
       - "*.md"
   workflow_dispatch:   # bisa dijalankan manual dari tab Actions
   schedule:
-    - cron: "0 */6 * * *"   # build + deteksi selector berkala (domain baru diusulkan lewat domain-watch.yml)
+    - cron: "0 */6 * * *"   # build berkala (selector hanya dideteksi ulang bila fixture berubah; domain baru diusulkan lewat domain-watch.yml)
 
 permissions:
   contents: write
@@ -44,7 +44,9 @@ jobs:
           ref: builds
           path: builds
 
-      - name: Validasi registry dan jalankan tes
+      - name: Validasi registry (termasuk gerbang fixture) dan jalankan tes
+        # registry.py exit 1 bila ada baris aktif di domains.yml tanpa fixture HTML lengkap dari domain itu:
+        # build berhenti di sini, sebelum plugin dibuat/diubah, dicommit, atau dipublikasikan.
         run: |
           cd src
           pip install beautifulsoup4
@@ -59,7 +61,8 @@ jobs:
           # repo.json otomatis sesuai nama repo GitHub ini (format manifest CloudStream)
           python3 .github/scripts/generate_json.py repo
 
-      - name: Deteksi selector otomatis
+      - name: Buat Selectors.kt dari fixture HTML nyata
+        # exit 1 bila fixture hilang/tidak cocok atau daftar item tidak bisa dideteksi (build berhenti, tidak ada commit)
         env:
           # jalankan manual dari tab Actions = paksa deteksi ulang semua plugin
           FORCE_DETECT: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}

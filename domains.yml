@@ -11,6 +11,14 @@
 #   TAMBAH : tulis baris baru (nama harus huruf/angka & berakhiran "Provider")
 #            jenis film/serial: tulis "NamaFolder: movie" di plugin_types.yml
 #
+# FIXTURE DULU (wajib untuk setiap baris AKTIF, juga saat mengganti URL ke domain baru):
+#   1. Unggah HTML asli dari browser ke tests/kotlin/fixtures/<NamaFolder>/ :
+#        list.html (daftar/beranda), detail.html (satu judul), episode.html (satu episode)
+#   2. Baru tambahkan/ubah baris di sini.
+#   Build GAGAL di langkah registry.py (tidak ada plugin dibuat, tidak ada yang dipublikasikan) kalau
+#   fixture belum lengkap, bukan HTML, atau berasal dari domain lain. Baris yang di-# tidak diperiksa.
+#   Selectors.kt dibuat otomatis dari fixture itu (detect_selectors.py), bukan dari situs langsung.
+#
 # check_domains.py juga memperbarui URL di sini sendiri kalau situs redirect ke domain baru.
 # ============================================================
 AnimeSailProvider: https://anisail.com

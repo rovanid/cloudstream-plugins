@@ -8,6 +8,11 @@ Untuk tiap entri aktif di domains.yml:
      (probe langsung ke origin baru, https, status 200, kata kunci ada, host belum dipakai plugin lain)
   3. hasilnya ditulis ke laporan JSON (--report) dan ringkasan Markdown (--summary)
 
+Aturan fixture: domain baru diperlakukan sama seperti penambahan domain manual. Usulan hanya ditulis ke
+domains.yml kalau tests/kotlin/fixtures/<Plugin>/{list,detail,episode}.html SUDAH berasal dari origin baru.
+Kalau belum, vonisnya NEEDS_FIXTURE: dilaporkan, tidak diubah. Unggah fixture dari domain baru lalu ubah
+domains.yml secara manual (atau jalankan ulang skrip ini).
+
 Secara default skrip ini HANYA MELAPORKAN (domains.yml tidak diubah). Dengan --apply,
 usulan yang lolos verifikasi ditulis ke domains.yml di working tree; workflow domain-watch.yml
 lalu membuka Pull Request supaya manusia + tes yang memutuskan. build.yml tidak lagi memanggil skrip ini.
@@ -26,6 +31,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fixture_utils  # noqa: E402
 import registry  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -143,8 +149,10 @@ def verify_new_origin(new_origin: str, kws: list, taken_hosts: set, fetch=probe_
     return True, "terverifikasi langsung"
 
 
-def evaluate(entries, kw_table, fetch=probe_retry) -> list:
-    """entries: list registry.Entry aktif. Return list dict hasil per plugin."""
+def evaluate(entries, kw_table, fetch=probe_retry, fixture_ok=None) -> list:
+    """entries: list registry.Entry aktif. Return list dict hasil per plugin.
+    fixture_ok(name, origin_baru) -> bool: kalau diberikan, usulan pindah domain hanya lolos bila fixture
+    HTML untuk origin baru sudah ada (None = tidak diperiksa, dipakai tes lama)."""
     results = []
     hosts = {e.name: (urlparse(e.url).hostname or "").lower() for e in entries}
     for e in entries:
@@ -166,7 +174,12 @@ def evaluate(entries, kw_table, fetch=probe_retry) -> list:
                 taken = {h for n, h in hosts.items() if n != e.name}
                 ok, why = verify_new_origin(final, kws, taken, fetch)
                 row["reason"] = f"redirect ke {final}: {why}"
-                if ok:
+                if ok and fixture_ok is not None and not fixture_ok(e.name, final):
+                    row["verdict"] = "NEEDS_FIXTURE"
+                    row["reason"] = (f"redirect ke {final} terverifikasi, tetapi fixture HTML untuk domain baru belum ada "
+                                     f"di tests/kotlin/fixtures/{e.name}/; domains.yml tidak diubah. Unggah fixture dari "
+                                     "domain baru, lalu ubah domains.yml")
+                elif ok:
                     row["proposed"] = final
                     row["verdict"] = "MOVED"
         elif verdict == "BLOCKED":
@@ -193,7 +206,8 @@ def apply_proposals(text: str, results: list) -> str:
 
 
 def summary_md(results: list) -> str:
-    icon = {"OK": "✅", "MOVED": "🔁", "BLOCKED": "⏸️", "PARKED": "🅿️", "DEAD": "❌", "UNVERIFIED": "❔"}
+    icon = {"OK": "✅", "MOVED": "🔁", "BLOCKED": "⏸️", "PARKED": "🅿️", "DEAD": "❌", "UNVERIFIED": "❔",
+            "NEEDS_FIXTURE": "📎"}
     lines = ["| Plugin | Vonis | Domain | Usulan | Keterangan |", "|---|---|---|---|---|"]
     for r in results:
         lines.append(f"| {r['name']} | {icon.get(r['verdict'], '?')} {r['verdict']} | {r['current']} | "
@@ -211,7 +225,8 @@ def main() -> int:
     rep = registry.Report()
     registry.parse_domains(DOMAINS.read_text(encoding="utf-8"), rep)
     entries = [e for e in rep.entries if e.active]
-    results = evaluate(entries, read_keywords())
+    results = evaluate(entries, read_keywords(),
+                       fixture_ok=lambda n, u: not fixture_utils.problems(ROOT, n, u))
 
     for r in results:
         print(f"[{r['verdict']}] {r['name']}: {r['current']} - {r['reason']}")

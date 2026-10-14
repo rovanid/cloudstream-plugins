@@ -86,6 +86,13 @@ Satu repo public cukup; tidak ada repo tambahan. Domain baru lewat PR agar ada r
 ## 10. Secrets/variabel
 Belum ada yang wajib. Direncanakan (opsional, tahap 5): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `DISCORD_WEBHOOK_URL`. Setting repo: izinkan Actions membuat PR.
 
+## 10b. Alur "fixture dulu" (sesi 15 Okt 2026)
+- Urutan wajib: (1) pengguna unggah `tests/kotlin/fixtures/<Plugin>/{list,detail,episode}.html`, (2) tambah/ubah baris di `domains.yml`, (3) `registry.py` menolak baris AKTIF yang fixture-nya belum lengkap, bukan HTML, atau dari host lain (build gagal paling awal), (4) `detect_selectors.py` membuat `Selectors.kt` dari fixture tersebut.
+- Kode baru/berubah: `fixture_utils.py` (baru; cek berkas + host asal via `Snapshot-Content-Location`/canonical/og:url), `registry.py` (`check_fixtures`, `validate(require_fixtures=True)`), `sync_plugins.py` (tidak membuat folder tanpa fixture, exit 1), `check_domains.py` (vonis `NEEDS_FIXTURE`: pindah domain tidak diusulkan bila fixture domain baru belum ada), `detect_selectors.py` (fixture-only: kode jaringan dibuang; pagination/pencarian/kategori dibaca dari HTML; episode 1 tautan dalam `<li>` diterima; pemutar atribut `data-em`/`option[value]`/base64; uji balik selector; exit 1 bila fixture hilang atau ITEM tak valid).
+- Hasil pada fixture nyata: AnimeSail otomatis = selector manual (ITEM `article.bs`, EPISODE `ul.daftar li a`, PLAYER `select.mirror option[data-em]`, paging `path`) + SEARCH `/?s={q}` dan GENRE. Sflix: SEARCH kosong (input `keyword` tanpa `<form>`), paging none, EPISODE kosong (film), 8 kategori dari menu (belum diuji ke situs).
+- Perilaku yang perlu diketahui: `AnimeSailProvider/Selectors.kt` masih DIKUNCI manual sehingga tidak ditulis ulang; `SflixProvider/Selectors.kt` baru berubah setelah `build.yml` dijalankan manual (FORCE_DETECT) karena sidik jari fixture sama. Kategori hasil deteksi belum diverifikasi ke situs. Mengganti URL ke domain baru juga butuh fixture domain baru.
+- Tes Python: 108 lulus. Belum dijalankan di Actions nyata. `SelectorFixtureTest.kt` tidak diubah (masih melewati fixture yang tidak ada; untuk plugin aktif sekarang fixture selalu ada).
+
 ## 11. Workflow
 (Semua berjalan di `ubuntu-24.04`.) `build.yml` (push main + tiap 6 jam), `health.yml` (tiap 12 jam, uji pemutaran), `domain-watch.yml` (tiap 6 jam), `pr-check.yml` (PR). Publish masih `git push --force` ke `builds` (belum ada rollback).
 

@@ -82,6 +82,26 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(r["verdict"], "MOVED")
         self.assertEqual(r["proposed"], "https://new.a.io")
 
+    def test_moved_domain_without_fixtures_is_not_proposed(self):
+        t = {"https://a.com": (200, "https://new.a.io/home", "Welcome to AlphaSite"),
+             "https://new.a.io": (200, "https://new.a.io/", "Welcome to AlphaSite")}
+        asked = []
+
+        def no_fixture(name, url):
+            asked.append((name, url))
+            return False
+        r = cd.evaluate([E("AlphaSiteProvider", "https://a.com")], {}, fetch=fake(t), fixture_ok=no_fixture)[0]
+        self.assertEqual(r["verdict"], "NEEDS_FIXTURE")
+        self.assertIsNone(r["proposed"])
+        self.assertIn("fixture HTML", r["reason"])
+        self.assertEqual(asked, [("AlphaSiteProvider", "https://new.a.io")])
+
+    def test_moved_domain_with_fixtures_is_proposed(self):
+        t = {"https://a.com": (200, "https://new.a.io/home", "Welcome to AlphaSite"),
+             "https://new.a.io": (200, "https://new.a.io/", "Welcome to AlphaSite")}
+        r = cd.evaluate([E("AlphaSiteProvider", "https://a.com")], {}, fetch=fake(t), fixture_ok=lambda n, u: True)[0]
+        self.assertEqual((r["verdict"], r["proposed"]), ("MOVED", "https://new.a.io"))
+
     def test_redirect_to_parked_host_rejected(self):
         t = {"https://a.com": (200, "https://evil.xyz/a", "Welcome to AlphaSite"),
              "https://evil.xyz": (200, "https://evil.xyz/", "buy this domain")}
@@ -123,7 +143,7 @@ class ApplyTest(unittest.TestCase):
         root = Path(tempfile.mkdtemp())
         (root / "domains.yml").write_text(cd.apply_proposals(
             "AlphaSiteProvider: https://a.com\n", [{"name": "AlphaSiteProvider", "current": "https://a.com", "proposed": "https://n.io"}]))
-        self.assertTrue(registry.validate(root).ok)
+        self.assertTrue(registry.validate(root, require_fixtures=False).ok)
 
 
 if __name__ == "__main__":

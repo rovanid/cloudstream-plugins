@@ -7,7 +7,12 @@ Yang baru: semua kesalahan yang sebelumnya DIABAIKAN diam-diam kini dilaporkan, 
 berhenti (exit 1) kalau ada ERROR, sebelum check_domains / sync_plugins / apply_domains jalan.
 
 ERROR  -> build diblokir:   nama/URL tidak valid, nama ganda, host ganda, baris tanpa ':',
-                            jenis plugin tidak dikenal.
+                            jenis plugin tidak dikenal, FIXTURE HTML belum lengkap/tidak cocok.
+Fixture dulu: tiap entri AKTIF wajib punya tests/kotlin/fixtures/<Nama>/{list,detail,episode}.html
+         yang berasal dari host yang sama dengan URL-nya (lihat fixture_utils.py). Urutan kerja:
+         unggah fixture -> tambah baris di domains.yml -> build. Tanpa fixture, penambahan DITOLAK
+         dan build gagal sebelum sync_plugins/apply_domains/detect_selectors jalan.
+         Entri yang di-# (DISABLED) tidak diperiksa fixture-nya.
 WARN   -> dilaporkan saja:  http (bukan https), folder plugin akan DIHAPUS sync_plugins
                             (ada di disk tetapi barisnya sudah tidak ada di domains.yml), plugin_types
                             menunjuk nama yang tidak ada.
@@ -22,6 +27,9 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fixture_utils  # noqa: E402
 
 NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*Provider")
 URL_RE = re.compile(r"https?://[A-Za-z0-9.-]+(:\d+)?")   # sama dengan sync/apply_domains
@@ -131,7 +139,19 @@ def check_disk(root: Path, rep: Report, types: dict) -> None:
                                 "sync_plugins.py AKAN MENGHAPUSNYA (termasuk tuning SiteConfig manual)")
 
 
-def validate(root: Path) -> Report:
+def check_fixtures(root: Path, rep: Report) -> None:
+    """Tolak entri aktif yang fixture HTML-nya belum ada atau bukan dari domain tersebut."""
+    for e in (x for x in rep.entries if x.active):
+        if not (URL_RE.fullmatch(e.url) and NAME_RE.fullmatch(e.name)):
+            continue            # sudah dilaporkan sebagai error format; jangan dobel
+        probs = fixture_utils.problems(root, e.name, e.url)
+        if probs:
+            rep.errors.append(f"baris {e.line}: {e.name} DITOLAK, fixture HTML tidak memenuhi syarat: "
+                              + "; ".join(probs) + f". Unggah fixture asli dari {e.url} ke "
+                              f"tests/kotlin/fixtures/{e.name}/ lebih dulu, baru tambahkan baris ini")
+
+
+def validate(root: Path, require_fixtures: bool = True) -> Report:
     rep = Report()
     dom = root / "domains.yml"
     if not dom.exists():
@@ -143,6 +163,8 @@ def validate(root: Path) -> Report:
     check_duplicates(rep)
     types = read_types(root / "plugin_types.yml", rep)
     check_disk(root, rep, types)
+    if require_fixtures:
+        check_fixtures(root, rep)
     return rep
 
 

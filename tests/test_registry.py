@@ -4,18 +4,30 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import registry  # noqa: E402
+from fixture_helpers import write_fixtures  # noqa: E402
 
 
-def make(domains: str, types: str = "", folders=()) -> Path:
+def make(domains: str, types: str = "", folders=(), fixtures: bool = True) -> Path:
+    """fixtures=True: tiap entri AKTIF otomatis diberi fixture yang cocok (tes lain bukan soal fixture)."""
     root = Path(tempfile.mkdtemp())
     (root / "domains.yml").write_text(domains, encoding="utf-8")
+    if fixtures:
+        for e in (x for x in _entries(domains) if x.active):
+            write_fixtures(root, e.name, e.url.split("//", 1)[1].split("/")[0])
     if types:
         (root / "plugin_types.yml").write_text(types, encoding="utf-8")
     for f in folders:
         (root / f / "src").mkdir(parents=True)
         (root / f / "build.gradle.kts").write_text("version = 1\n")
     return root
+
+
+def _entries(domains: str):
+    rep = registry.Report()
+    registry.parse_domains(domains, rep)
+    return rep.entries
 
 
 class RegistryTest(unittest.TestCase):
@@ -79,6 +91,62 @@ class RegistryTest(unittest.TestCase):
 
     def test_missing_file(self):
         self.assertFalse(registry.validate(Path(tempfile.mkdtemp())).ok)
+
+
+class FixtureGateTest(unittest.TestCase):
+    """Fixture dulu: unggah fixture -> tambah URL -> validasi. Tanpa fixture, penambahan ditolak."""
+
+    def test_new_domain_without_fixtures_is_rejected(self):
+        r = registry.validate(make("AProvider: https://a.com\n", fixtures=False))
+        self.assertFalse(r.ok)
+        self.assertEqual(len(r.errors), 1)
+        self.assertIn("AProvider DITOLAK", r.errors[0])
+        self.assertIn("list.html belum ada", r.errors[0])
+
+    def test_only_the_entry_missing_fixtures_is_rejected(self):
+        root = make("AProvider: https://a.com\n")
+        (root / "domains.yml").write_text("AProvider: https://a.com\nBProvider: https://b.com\n", encoding="utf-8")
+        r = registry.validate(root)
+        self.assertEqual(len(r.errors), 1)
+        self.assertIn("BProvider DITOLAK", r.errors[0])
+
+    def test_incomplete_fixtures_rejected(self):
+        root = make("AProvider: https://a.com\n", fixtures=False)
+        write_fixtures(root, "AProvider", "a.com", kinds=("list",))
+        r = registry.validate(root)
+        self.assertFalse(r.ok)
+        self.assertIn("detail.html belum ada", r.errors[0])
+        self.assertIn("episode.html belum ada", r.errors[0])
+
+    def test_fixtures_from_another_domain_rejected(self):
+        root = make("AProvider: https://a.com\n", fixtures=False)
+        write_fixtures(root, "AProvider", "lain.com")
+        r = registry.validate(root)
+        self.assertFalse(r.ok)
+        self.assertIn("lain.com, bukan a.com", r.errors[0])
+
+    def test_changing_url_to_new_domain_requires_new_fixtures(self):
+        root = make("AProvider: https://a.com\n")
+        self.assertTrue(registry.validate(root).ok)
+        (root / "domains.yml").write_text("AProvider: https://baru.com\n", encoding="utf-8")
+        self.assertFalse(registry.validate(root).ok)
+        write_fixtures(root, "AProvider", "baru.com")
+        self.assertTrue(registry.validate(root).ok)
+
+    def test_disabled_entry_needs_no_fixtures(self):
+        root = make("AProvider: https://a.com\n#BProvider: https://b.com\n")
+        self.assertTrue(registry.validate(root).ok)
+
+    def test_format_error_not_duplicated_by_fixture_error(self):
+        r = registry.validate(make("Foo: https://a.com\nAProvider: https://a.com\n", fixtures=False))
+        self.assertFalse(any("Foo" in m and "DITOLAK" in m for m in r.errors))
+
+    def test_require_fixtures_false_skips_gate(self):
+        self.assertTrue(registry.validate(make("AProvider: https://a.com\n", fixtures=False), require_fixtures=False).ok)
+
+    def test_real_repo_passes(self):
+        r = registry.validate(Path(__file__).resolve().parents[1])
+        self.assertTrue(r.ok, r.errors)
 
 
 if __name__ == "__main__":

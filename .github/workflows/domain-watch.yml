@@ -2,6 +2,8 @@ name: Pantau domain
 
 # Memeriksa domain tiap plugin. TIDAK mengubah main: bila ada domain baru yang lolos verifikasi,
 # workflow membuka/memperbarui satu Pull Request (branch auto/domain-update) yang harus di-merge manual.
+# Usulan hanya dibuat bila fixture HTML untuk domain baru SUDAH ada di tests/kotlin/fixtures/<Plugin>/
+# (aturan yang sama dengan penambahan domain manual); jika belum, hanya dilaporkan (NEEDS_FIXTURE).
 # Prasyarat: Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests".
 
 concurrency:
@@ -54,7 +56,7 @@ jobs:
           git commit -m "chore(domain): usulan domain baru (perlu review)"
           git push --force origin "$BRANCH"
           {
-            echo "Usulan otomatis dari **domain-watch**. Origin baru sudah diverifikasi langsung (https, HTTP 200, kata kunci ada, host unik); tes registry lolos."
+            echo "Usulan otomatis dari **domain-watch**. Origin baru sudah diverifikasi langsung (https, HTTP 200, kata kunci ada, host unik, fixture domain baru tersedia); tes registry lolos."
             echo; echo "**Review sebelum merge:** buka domain baru di browser dan pastikan itu situs yang benar. Setelah merge, build.yml menaikkan versi plugin."
             echo; cat "$RUNNER_TEMP/domain_summary.md"
           } > "$RUNNER_TEMP/pr_body.md"

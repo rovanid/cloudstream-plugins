@@ -3,7 +3,8 @@
 Sinkronkan folder plugin dengan domains.yml (dijalankan SEBELUM apply_domains.py):
 
   - baris baru di domains.yml  -> folder plugin dibuat dari .github/templates/
-                                  (jenis dari plugin_types.yml: anime | movie)
+                                  (jenis dari plugin_types.yml: anime | movie) HANYA kalau fixture HTML
+                                  domain itu sudah ada (tests/kotlin/fixtures/<Nama>/); kalau belum -> DITOLAK
   - baris DIHAPUS              -> folder plugin dihapus
   - baris di-# (#Nama: https://host) -> DISABLED: folder dipertahankan (termasuk tuning Selectors/SiteConfig),
                                   tetapi tidak dibuild (lihat settings.gradle.kts)
@@ -17,6 +18,9 @@ import re
 import shutil
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fixture_utils  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES = ROOT / ".github" / "templates"
@@ -95,6 +99,7 @@ def main() -> int:
     domains = read_flat(ROOT / "domains.yml")
     types = read_flat(ROOT / "plugin_types.yml")
     prune(domains, frozenset(read_disabled(ROOT / "domains.yml")))
+    rejected = 0
     for name, url in domains.items():
         if (ROOT / name).exists():
             continue
@@ -109,9 +114,15 @@ def main() -> int:
         if not (TEMPLATES / kind).is_dir():
             print(f"[SKIP] {name}: jenis '{kind}' tidak dikenal (anime | movie)")
             continue
+        probs = fixture_utils.problems(ROOT, name, url)
+        if probs:
+            rejected += 1
+            print(f"[TOLAK] {name}: tidak dibuat, fixture HTML tidak memenuhi syarat: " + "; ".join(probs),
+                  file=sys.stderr)
+            continue
         scaffold(name, url, kind)
         print(f"[BARU] {name}: plugin dibuat dari template '{kind}' ({url})")
-    return 0
+    return 1 if rejected else 0
 
 
 if __name__ == "__main__":
