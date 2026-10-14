@@ -21,9 +21,14 @@ sourceSets {
         // apa adanya, tanpa salinan, jadi tes selalu menguji kode yang sama dengan yang dibuild.
         // AdaptiveProvider.kt sengaja TIDAK ikut (butuh class Cloudstream/Android).
         kotlin.srcDir("../../shared/kotlin/com/cloudstreamid/common")
-        kotlin.srcDir("../../AnimeSailProvider/src/main/kotlin/com/cloudstreamid/animesailprovider")
-        kotlin.srcDir("../../KuronimeProvider/src/main/kotlin/com/cloudstreamid/kuronimeprovider")
-        kotlin.srcDir("../../LayarKaca21Provider/src/main/kotlin/com/cloudstreamid/layarkaca21provider")
+        // Provider ditemukan otomatis dari folder *Provider yang BENAR-BENAR ada di repo,
+        // jadi menambah/menghapus plugin tidak perlu mengedit file ini lagi.
+        file("../..").listFiles()
+            ?.filter { it.isDirectory && it.name.endsWith("Provider") }
+            ?.forEach { dir ->
+                val pkgDir = file("${dir.path}/src/main/kotlin/com/cloudstreamid/${dir.name.lowercase()}")
+                if (File(pkgDir, "Selectors.kt").exists()) kotlin.srcDir(pkgDir)
+            }
         kotlin.exclude("**/*Provider.kt", "**/*Plugin.kt")
     }
 }
