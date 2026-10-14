@@ -46,7 +46,23 @@ class SelectorFixtureTest {
             println("[LEWATI] fixture tidak ada: ${f.path}")
             return null
         }
-        return Jsoup.parse(f.readText(), "https://example.invalid/")
+        return Jsoup.parse(extractHtml(f.readText()), "https://example.invalid/")
+    }
+
+    /**
+     * Fixture dari Chrome "Simpan halaman" berformat MHTML ("Saved by Blink"): HTML asli ada di
+     * bagian text/html pertama. Jsoup tidak boleh membaca file mentahnya. HTML biasa dikembalikan apa adanya.
+     */
+    private fun extractHtml(raw: String): String {
+        if (!raw.trimStart().startsWith("From:") || !raw.contains("Saved by Blink")) return raw
+        val boundary = Regex("boundary=\"?([^\"\\r\\n;]+)\"?").find(raw)?.groupValues?.get(1) ?: return raw
+        for (part in raw.split("--$boundary").drop(1)) {
+            val sep = Regex("\\r?\\n\\r?\\n").find(part) ?: continue
+            val headers = part.substring(0, sep.range.first)
+            if (!Regex("(?i)content-type:\\s*text/html").containsMatchIn(headers)) continue
+            return part.substring(sep.range.last + 1)
+        }
+        return raw
     }
 
     @TestFactory
