@@ -1,0 +1,43 @@
+[
+  {
+    "iconUrl": "https://www.google.com/s2/favicons?domain=anisail.com&sz=128",
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/rovanid/cloudstream-plugins",
+    "fileSize": 64978,
+    "status": 3,
+    "language": "id",
+    "authors": [
+      "Plugin ID"
+    ],
+    "tvTypes": [
+      "Anime",
+      "AnimeMovie",
+      "OVA"
+    ],
+    "version": 11,
+    "internalName": "AnimeSailProvider",
+    "description": "AnimeSail - dibuild otomatis",
+    "url": "https://raw.githubusercontent.com/rovanid/cloudstream-plugins/builds/AnimeSailProvider.cs3",
+    "name": "AnimeSail"
+  },
+  {
+    "apiVersion": 1,
+    "repositoryUrl": "https://github.com/rovanid/cloudstream-plugins",
+    "fileSize": 57533,
+    "status": 3,
+    "language": "id",
+    "authors": [
+      "Plugin ID"
+    ],
+    "tvTypes": [
+      "Movie",
+      "TvSeries",
+      "Anime"
+    ],
+    "version": 3,
+    "internalName": "MyHomepage",
+    "description": "Beranda kustom: gabungkan kategori beranda dari plugin lain (tanpa sync)",
+    "url": "https://raw.githubusercontent.com/rovanid/cloudstream-plugins/builds/MyHomepage.cs3",
+    "name": "MyHomepage"
+  }
+]
