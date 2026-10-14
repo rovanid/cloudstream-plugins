@@ -50,6 +50,7 @@ abstract class AdaptiveProvider : MainAPI() {
             val r = app.get(url, referer = ref, interceptor = cf)
             log.add("fetch cf: HTTP ${r.code} ${r.text.length}B")
             if (r.code in 200..299) return r.document
+            dump("fetch-fail", url, r.text)
         } catch (e: Exception) {
             log.add("fetch cf: ${e.javaClass.simpleName} ${e.message?.take(60)}")
         }
@@ -57,6 +58,7 @@ abstract class AdaptiveProvider : MainAPI() {
             val r = app.get(url, referer = ref)
             log.add("fetch polos: HTTP ${r.code} ${r.text.length}B")
             if (r.code in 200..299) return r.document
+            dump("fetch-fail", url, r.text)
         } catch (e: Exception) {
             log.add("fetch polos: ${e.javaClass.simpleName} ${e.message?.take(60)}")
         }
@@ -379,6 +381,18 @@ abstract class AdaptiveProvider : MainAPI() {
     }
 
     private fun episodeAnchors(doc: Document, pageUrl: String): List<Element> {
+        // selector yang ditulis manual untuk situs ini dipercaya: tanpa syarat kata "episode" dan cukup 1 tautan
+        val trusted = (listOf(config.episode) + config.extraEpisode).filter { it.isNotBlank() }.distinct()
+        for (s in trusted) {
+            val found = safeSelect(doc, s).flatMap {
+                if (it.tagName() == "a") listOf(it) else it.select("a[href]").toList()
+            }
+            val good = found.filter { a ->
+                val h = fixUrlNull(a.attr("href").trim())
+                validAnchor(a) && h != null && h.trimEnd('/') != pageUrl.trimEnd('/') && !isRootOrJunk(h)
+            }.distinctBy { it.attr("href") }
+            if (good.isNotEmpty()) return good
+        }
         val sels = (listOf(config.episode) + config.extraEpisode + BUILTIN_EPISODE).filter { it.isNotBlank() }.distinct()
         for (s in sels) {
             val found = safeSelect(doc, s).flatMap {

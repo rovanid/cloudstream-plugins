@@ -29,7 +29,15 @@ class SflixProvider : AdaptiveProvider() {
         useOgDesc = Sel.USE_OG_DESC,
         player = Sel.PLAYER,
         playerAttrs = Sel.PLAYER_ATTRS,
-        categories = Sel.CATEGORIES,
+        // Beranda "/" hanya halaman SEO; daftar film ada di halaman-halaman ini (dari menu situs).
+        // Format paginasi belum diketahui: "?page={page}" adalah tebakan.
+        categories = listOf(
+            "/latest-movies?page={page}" to "Film Terbaru",
+            "/popular-movies?page={page}" to "Film Populer",
+            "/tv-series?page={page}" to "Serial TV",
+            "/top-imdb?page={page}" to "Top IMDb",
+            "/anime?page={page}" to "Anime"
+        ),
         // Situs ini memuat daftar & pemutar lewat JavaScript; hasil bisa kosong di beberapa domain.
     )
 }
