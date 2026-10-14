@@ -36,7 +36,6 @@ UA = ("Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36")
 
 HEADER_RE = re.compile(r"^// @auto-detect(?:\s*\|\s*detected:\s*(\S+))?(?:\s*\|\s*score:\s*(\d+))?")
-VERSION_RE = re.compile(r"^(\s*version\s*=\s*)(\d+)", re.MULTILINE)
 EP_RE = re.compile(r"(episode|\beps?\b[ ._-]?\d+|\bep[ ._-]?\d+|chapter|/eps?[-/])", re.I)
 SKIP_PLAYER = re.compile(r"facebook\.com|disqus\.com|googletagmanager|recaptcha", re.I)
 CAT_OK = re.compile(r"genre|categor|kategori|series|movie|film|anime|ongoing|complete|"
@@ -439,17 +438,6 @@ object Sel {{
 """
 
 
-def bump_version(folder: Path) -> None:
-    g = folder / "build.gradle.kts"
-    if not g.exists():
-        return
-    t = g.read_text(encoding="utf-8")
-    m = VERSION_RE.search(t)
-    if m:
-        g.write_text(t[:m.start(2)] + str(int(m.group(2)) + 1) + t[m.end(2):], encoding="utf-8")
-        print(f"  version {m.group(2)} -> {int(m.group(2)) + 1}")
-
-
 def read_flat(path: Path) -> dict:
     out = {}
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -511,8 +499,7 @@ def main() -> int:
         changed = old.split("\n", 1)[1:] != new_text.split("\n", 1)[1:]
         sel_file.write_text(new_text, encoding="utf-8")
         print(f"[{'UBAH' if changed else 'SAMA'}] {name}: skor {new_score}/9")
-        if changed:
-            bump_version(folder)
+        # version dinaikkan oleh bump_versions.py (jalan sesudah skrip ini)
         rows.append((name, "ok", d))
 
     lines = ["# Laporan deteksi selector", "",

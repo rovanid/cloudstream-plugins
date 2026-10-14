@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Terapkan domains.yml ke source Kotlin tiap provider, lalu naikkan
-`version` di build.gradle.kts HANYA untuk provider yang domainnya berubah.
+Terapkan domains.yml ke source Kotlin tiap provider (mainUrl).
+`version` TIDAK dinaikkan di sini: itu tugas bump_versions.py (dijalankan sesudahnya), yang
+mendeteksi perubahan mainUrl sekaligus perubahan kode lain dan menaikkan versi tepat sekali.
 
 Format domains.yml:
     NamaFolder: https://domain-baru.tld
 
-Aman dijalankan berulang (idempotent): kalau mainUrl sudah sama,
-tidak ada file yang diubah dan version tidak naik.
+Aman dijalankan berulang (idempotent): kalau mainUrl sudah sama, tidak ada file yang diubah.
 """
 import re
 import sys
@@ -18,7 +18,6 @@ DOMAINS = ROOT / "domains.yml"
 
 # override var mainUrl = "https://..."  /  override var mainUrl: String = "..."
 MAINURL_RE = re.compile(r'(\bmainUrl\s*(?::\s*String\s*)?=\s*")([^"]+)(")')
-VERSION_RE = re.compile(r"^(\s*version\s*=\s*)(\d+)", re.MULTILINE)
 
 
 def read_flat(path: Path) -> dict:
@@ -52,21 +51,6 @@ def apply_to_folder(folder: Path, url: str) -> bool:
     return changed
 
 
-def bump_version(folder: Path) -> None:
-    gradle = folder / "build.gradle.kts"
-    if not gradle.exists():
-        print(f"  [WARN] {gradle.relative_to(ROOT)} tidak ada, version tidak dinaikkan")
-        return
-    text = gradle.read_text(encoding="utf-8")
-    m = VERSION_RE.search(text)
-    if not m:
-        print(f"  [WARN] baris version tidak ditemukan di {gradle.relative_to(ROOT)}")
-        return
-    new_v = int(m.group(2)) + 1
-    gradle.write_text(text[:m.start(2)] + str(new_v) + text[m.end(2):], encoding="utf-8")
-    print(f"  version {m.group(2)} -> {new_v}")
-
-
 def main() -> int:
     if not DOMAINS.exists():
         print("domains.yml tidak ditemukan", file=sys.stderr)
@@ -83,7 +67,6 @@ def main() -> int:
             continue
         if apply_to_folder(folder, url):
             print(f"[UBAH] {name}")
-            bump_version(folder)
         else:
             print(f"[SAMA] {name}")
     return 0

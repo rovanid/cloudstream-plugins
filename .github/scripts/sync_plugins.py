@@ -4,7 +4,9 @@ Sinkronkan folder plugin dengan domains.yml (dijalankan SEBELUM apply_domains.py
 
   - baris baru di domains.yml  -> folder plugin dibuat dari .github/templates/
                                   (jenis dari plugin_types.yml: anime | movie)
-  - baris dihapus / di-#       -> folder plugin dihapus
+  - baris DIHAPUS              -> folder plugin dihapus
+  - baris di-# (#Nama: https://host) -> DISABLED: folder dipertahankan (termasuk tuning Selectors/SiteConfig),
+                                  tetapi tidak dibuild (lihat settings.gradle.kts)
 
 settings.gradle.kts otomatis memasukkan tiap folder yang punya build.gradle.kts,
 jadi menghapus folder = plugin hilang dari build dan plugins.json.
@@ -20,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES = ROOT / ".github" / "templates"
 NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*Provider")
 URL_RE = re.compile(r"https?://[A-Za-z0-9.-]+(:\d+)?")
+DISABLED_RE = re.compile(r"^#\s*([A-Za-z][A-Za-z0-9]*Provider)\s*:\s*https?://\S+")
 
 
 def read_flat(path: Path) -> dict:
@@ -31,6 +34,17 @@ def read_flat(path: Path) -> dict:
         if ":" in line:
             k, v = line.split(":", 1)
             out[k.strip()] = v.strip()
+    return out
+
+
+def read_disabled(path: Path) -> set:
+    """Nama plugin yang dinonaktifkan: baris `#Nama: https://host` di domains.yml."""
+    out = set()
+    if path.exists():
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            m = DISABLED_RE.match(raw.strip())
+            if m:
+                out.add(m.group(1))
     return out
 
 
@@ -62,13 +76,16 @@ def is_plugin_folder(d: Path) -> bool:
             and (d / "build.gradle.kts").exists() and (d / "src").is_dir())
 
 
-def prune(domains: dict) -> None:
+def prune(domains: dict, disabled: frozenset = frozenset()) -> None:
     valid = {n for n, u in domains.items()
              if NAME_RE.fullmatch(n) and URL_RE.fullmatch(u.rstrip("/"))}
     if not valid:
         print("[AMAN] domains.yml tidak punya entri valid, tidak ada plugin yang dihapus")
         return
     for d in sorted(ROOT.iterdir()):
+        if is_plugin_folder(d) and d.name in disabled and d.name not in domains:
+            print(f"[NONAKTIF] {d.name}: di-# di domains.yml, folder dipertahankan (tidak dibuild)")
+            continue
         if is_plugin_folder(d) and d.name not in domains:
             shutil.rmtree(d)
             print(f"[HAPUS] {d.name}: tidak ada lagi di domains.yml, folder dihapus")
@@ -77,7 +94,7 @@ def prune(domains: dict) -> None:
 def main() -> int:
     domains = read_flat(ROOT / "domains.yml")
     types = read_flat(ROOT / "plugin_types.yml")
-    prune(domains)
+    prune(domains, frozenset(read_disabled(ROOT / "domains.yml")))
     for name, url in domains.items():
         if (ROOT / name).exists():
             continue

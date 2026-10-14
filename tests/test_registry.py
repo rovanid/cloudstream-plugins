@@ -66,9 +66,16 @@ class RegistryTest(unittest.TestCase):
         self.assertTrue(any("jenis" in m for m in r.errors))
 
     def test_warns_folder_that_sync_would_delete(self):
-        r = registry.validate(make("AProvider: https://a.com\n#BProvider: https://b.com\n", folders=["AProvider", "BProvider"]))
+        # barisnya sudah tidak ada di domains.yml -> sync_plugins akan menghapus foldernya
+        r = registry.validate(make("AProvider: https://a.com\n", folders=["AProvider", "BProvider"]))
         self.assertTrue(r.ok)
         self.assertTrue(any("BProvider" in m and "MENGHAPUS" in m for m in r.warnings))
+
+    def test_disabled_folder_is_not_warned(self):
+        # di-# = DISABLED: folder dipertahankan, jadi tidak ada peringatan penghapusan
+        r = registry.validate(make("AProvider: https://a.com\n#BProvider: https://b.com\n", folders=["AProvider", "BProvider"]))
+        self.assertTrue(r.ok)
+        self.assertFalse(any("BProvider" in m and "MENGHAPUS" in m for m in r.warnings))
 
     def test_missing_file(self):
         self.assertFalse(registry.validate(Path(tempfile.mkdtemp())).ok)

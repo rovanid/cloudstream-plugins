@@ -9,8 +9,10 @@ berhenti (exit 1) kalau ada ERROR, sebelum check_domains / sync_plugins / apply_
 ERROR  -> build diblokir:   nama/URL tidak valid, nama ganda, host ganda, baris tanpa ':',
                             jenis plugin tidak dikenal.
 WARN   -> dilaporkan saja:  http (bukan https), folder plugin akan DIHAPUS sync_plugins
-                            (ada di disk tapi tidak aktif di domains.yml), plugin_types
+                            (ada di disk tetapi barisnya sudah tidak ada di domains.yml), plugin_types
                             menunjuk nama yang tidak ada.
+Status:  `Nama: https://host` = aktif; `#Nama: https://host` = DISABLED (folder dipertahankan, tidak
+         dibuild); baris dihapus = folder dihapus.
 Jalankan lokal:  python3 .github/scripts/registry.py [--root .] [--json]
 """
 import argparse
@@ -115,6 +117,7 @@ def read_types(path: Path, rep: Report) -> dict:
 
 def check_disk(root: Path, rep: Report, types: dict) -> None:
     active = {e.name for e in rep.entries if e.active}
+    disabled = {e.name for e in rep.entries if not e.active} - active
     for k in types:
         if k not in active:
             rep.warnings.append(f"plugin_types.yml: {k} tidak ada di domains.yml aktif")
@@ -122,8 +125,9 @@ def check_disk(root: Path, rep: Report, types: dict) -> None:
         return
     for d in sorted(root.iterdir()):
         if (d.is_dir() and NAME_RE.fullmatch(d.name) and (d / "build.gradle.kts").exists()
-                and (d / "src").is_dir() and d.name not in active):
-            rep.warnings.append(f"folder {d.name} ada di disk tetapi tidak aktif di domains.yml: "
+                and (d / "src").is_dir() and d.name not in active
+                and d.name not in disabled):
+            rep.warnings.append(f"folder {d.name} ada di disk tetapi barisnya tidak ada di domains.yml: "
                                 "sync_plugins.py AKAN MENGHAPUSNYA (termasuk tuning SiteConfig manual)")
 
 

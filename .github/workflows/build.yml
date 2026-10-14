@@ -67,6 +67,12 @@ jobs:
           pip install beautifulsoup4
           python3 .github/scripts/detect_selectors.py
 
+      - name: Naikkan versi plugin yang isinya berubah
+        run: |
+          cd src
+          # menaikkan version bila shared/kotlin, kode plugin, mainUrl, atau selector berubah sejak build terakhir
+          python3 .github/scripts/bump_versions.py
+
       - name: Commit perubahan otomatis
         run: |
           cd src

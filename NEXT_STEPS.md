@@ -1,8 +1,10 @@
-# NEXT_STEPS (urut prioritas; diperbarui 14 Okt 2026)
-1. Pengguna: aktifkan "Allow GitHub Actions to create pull requests", jalankan `domain-watch.yml` manual, laporkan hasilnya (verifikasi tahap 2 di dunia nyata).
-2. Tahap 3: naikkan `version` plugin otomatis saat `shared/` berubah; status DISABLED yang tidak menghapus folder (`sync_plugins.py`).
-3. Playback (prioritas produk): tes parser berbasis fixture HTML; `emitDirect` jangan anggap URL ditemukan = sukses; kualitas mp4 jangan ditebak.
+# NEXT_STEPS (urut prioritas; diperbarui 14 Okt 2026, sesi tahap 3)
+Selesai: izin PR diaktifkan dan `domain-watch.yml` dijalankan (hasil di `lanjut.md` bagian 7); Tahap 3 (versi otomatis + DISABLED) selesai di kode dan tes.
+
+1. Pengguna: commit zip ini ke `main`, jalankan `build.yml` manual (workflow_dispatch), lalu laporkan: apakah step "Naikkan versi" menulis `[SAMA]`/`[NAIK]`, apakah build Gradle lolos (`settings.gradle.kts` baru belum pernah dikompilasi), dan apakah `plugin_hashes.json` ikut ter-commit.
+2. Pengguna (opsional, uji jalur PR): ubah `domains.yml` Kuronime ke domain palsu di branch uji, jalankan `domain-watch.yml`, lihat apakah PR `auto/domain-update` dibuat; lalu kembalikan.
+3. Playback (prioritas produk): tes parser berbasis fixture HTML; `emitDirect` jangan anggap URL ditemukan = sukses; kualitas mp4 jangan ditebak. AnimeSail/LayarKaca21 berstatus 1 (Ok) tanpa bukti: pertimbangkan status 3 (Beta) sampai terverifikasi.
 4. Metadata di `load()`: rating, backdrop, status, judul alternatif, season, tipe film.
-5. Tahap 5: monitoring per domain + GitHub Issue (dedup/cooldown/pulih), Telegram/Discord opsional.
+5. Tahap 5: monitoring per domain + GitHub Issue (dedup/cooldown/pulih), Telegram/Discord opsional. Catatan: AnimeSail/LayarKaca21 selalu 403 dari CI, jadi pantau dengan keadaan "BLOCKED" tersendiri, jangan dihitung gagal.
 6. Tahap 6: prerelease dulu, riwayat build untuk rollback (ganti `--amend` + force push); patok versi Kotlin/Gradle/cloudstream3.
 7. Rapikan `health.yml` (hapus `|| true`, konflik push dengan `build.yml`).

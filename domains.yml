@@ -3,8 +3,11 @@
 #
 # Format:  NamaFolder: https://domain
 #
-#   UPDATE : ganti URL di baris yang ada (mainUrl & versi plugin naik otomatis)
-#   HAPUS  : hapus barisnya (atau beri # di depan) -> folder plugin ikut terhapus
+#   UPDATE : ganti URL di baris yang ada (mainUrl berubah, versi plugin naik otomatis)
+#   NONAKTIFKAN : beri # di depan baris (#NamaProvider: https://host) -> folder DIPERTAHANKAN
+#            (tuning Selectors/SiteConfig aman) tetapi plugin tidak dibuild/dipublikasikan.
+#            Aktifkan lagi dengan menghapus #.
+#   HAPUS  : hapus barisnya sama sekali -> folder plugin ikut terhapus
 #   TAMBAH : tulis baris baru (nama harus huruf/angka & berakhiran "Provider")
 #            jenis film/serial: tulis "NamaFolder: movie" di plugin_types.yml
 #

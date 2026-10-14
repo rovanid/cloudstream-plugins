@@ -55,7 +55,10 @@ publik; ini opsional dan tidak saya buat.
 - Tahap 1 (validasi registry): SELESAI. `.github/scripts/registry.py`, `tests/test_registry.py`.
 - Tahap 2 (temuan 1 dan 2): SELESAI di kode, 14 Okt 2026. `check_domains.py` hanya mengusulkan, `domain-watch.yml` membuat PR,
   `domain_keywords.yml` memberi keyword per plugin, ada retry. Belum pernah dijalankan di GitHub Actions (butuh jaringan dan izin PR).
-- Tahap 3 dst: BELUM.
+  Dijalankan di Actions 14 Okt 2026: sukses, tidak ada usulan (dua sumber 403 dari CI, Kuronime OK); jalur PR belum teruji.
+- Tahap 3 (temuan 3 dan 4): SELESAI di kode dan tes, 14 Okt 2026. `bump_versions.py` + `plugin_hashes.json`; `#Nama: url` = DISABLED
+  (folder dipertahankan, tidak dibuild). Belum dijalankan di Actions; `settings.gradle.kts` belum dikompilasi.
+- Tahap 4 dst: BELUM.
 
 ## Tahap berikutnya (usulan urutan)
 2. Ganti adopsi redirect otomatis dengan **Pull Request** + tes, dan keyword per domain.

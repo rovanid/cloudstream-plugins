@@ -15,8 +15,10 @@ lengkap dengan pemantauan domain tiap 6 jam (usulan domain baru masuk lewat Pull
 
 ## Kelola plugin: cukup edit `domains.yml`
 
-- **Update domain**: ganti URL di barisnya (atau merge PR dari domain-watch). `mainUrl` dan `version` plugin naik otomatis.
-- **Hapus plugin**: hapus barisnya (atau beri `#` di depan). Folder plugin ikut terhapus saat workflow jalan.
+- **Update domain**: ganti URL di barisnya (atau merge PR dari domain-watch). `mainUrl` berubah dan `version` plugin naik otomatis (`bump_versions.py`).
+- **Nonaktifkan plugin**: beri `#` di depan barisnya (`#NamaProvider: https://host`). Folder dan tuning manualnya dipertahankan, tetapi plugin tidak dibuild/dipublikasikan. Hapus `#` untuk mengaktifkan lagi.
+- **Hapus plugin**: hapus barisnya sama sekali. Folder plugin ikut terhapus saat workflow jalan.
+- **Versi otomatis**: `version` naik 1 bila `shared/kotlin`, kode plugin, `mainUrl`, atau selector berubah sejak build terakhir (hash di `plugin_hashes.json`; jangan diedit manual).
   Pengaman: kalau `domains.yml` kosong/rusak, tidak ada yang dihapus.
 - **Tambah plugin**: tambah baris baru (lihat bagian "Tambah plugin baru").
 
