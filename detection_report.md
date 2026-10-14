@@ -1,11 +1,11 @@
 # Laporan deteksi selector
 
-Dibuat otomatis oleh `detect_selectors.py`. Tanda ❌ berarti perlu disetel manual (hapus baris `@auto-detect` di `Selectors.kt` lalu edit).
+Dibuat otomatis oleh `detect_selectors.py` dari fixture HTML nyata (tanpa akses situs). ❌ = tidak ada buktinya di HTML; runtime memakai selector bawaan/heuristik. Kategori diambil dari menu situs dan belum diuji ke situs.
 
-| Plugin | Sumber | Item | Judul | Cari | Halaman | Kategori | Deskripsi | Genre | Episode | Pemutar |
+| Plugin | Fixture | Item | Judul | Cari | Halaman | Kategori | Deskripsi | Genre | Episode | Pemutar |
 |---|---|---|---|---|---|---|---|---|---|---|
-| SflixProvider | fixture | ✅ | ✅ | ❌ | ❌ | 1 | ✅ | ❌ | ❌ | ❌ |
 
 Tidak diproses / gagal:
 
 - **AnimeSailProvider**: dikunci manual
+- **SflixProvider**: fixture tidak berubah (terakhir 2026-10-14)
