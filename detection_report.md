@@ -8,4 +8,3 @@ Dibuat otomatis oleh `detect_selectors.py`. Tanda ❌ berarti perlu disetel manu
 Tidak diproses / gagal:
 
 - **AnimeSailProvider**: dikunci manual
-- **SflixProvider**: belum waktunya (terakhir 2026-10-14)
