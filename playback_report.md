@@ -1,6 +1,6 @@
 # Laporan uji pemutaran
 
-Terakhir dijalankan: 2026-10-14 16:55 UTC (`check_playback.py`).
+Terakhir dijalankan: 2026-10-14 17:17 UTC (`check_playback.py`).
 
 ✅ terbukti bisa diputar · 🟡 embed hidup tapi tidak bisa diverifikasi · ❌ gagal · ⏸️ tidak bisa diuji dari CI · 🔁 URL berganti/tidak terjangkau (dikecualikan, bukan kegagalan)
 
