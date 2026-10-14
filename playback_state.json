@@ -3,7 +3,7 @@
     "fails": 0,
     "auto_down": false,
     "last": "BLOCKED",
-    "checked": "2026-10-14 12:40 UTC"
+    "checked": "2026-10-14 16:55 UTC"
   },
   "KuronimeProvider": {
     "fails": 0,
@@ -16,5 +16,11 @@
     "auto_down": false,
     "last": "BLOCKED",
     "checked": "2026-10-14 12:40 UTC"
+  },
+  "SflixProvider": {
+    "fails": 0,
+    "auto_down": false,
+    "last": "INCONCLUSIVE",
+    "checked": "2026-10-14 16:55 UTC"
   }
 }
