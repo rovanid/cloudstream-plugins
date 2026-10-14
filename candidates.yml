@@ -13,8 +13,8 @@
 #   3. Kalau semua gagal -> domains.yml tidak diubah.
 # ============================================================
 
-AnimeSailProvider: animesail | https://animesail.example
-KuramanimeProvider: kuramanime | https://kuramanime.example
-OtakudesuProvider: otakudesu | https://otakudesu.example
-LayarKaca21Provider: layarkaca21 | https://layarkaca21.example
-SflixProvider: sflix | https://sflix.example
+AnimeSailProvider: animesail | https://anisail.com/
+KuramanimeProvider: kuramanime | https://v20.kuramanime.ing/
+OtakudesuProvider: otakudesu | https://otakudesu.blog/
+LayarKaca21Provider: layarkaca21 | https://tv12.lk21official.cc/
+SflixProvider: sflix | https://ssflix.pro/
