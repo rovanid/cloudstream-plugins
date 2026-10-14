@@ -21,10 +21,15 @@ data class SiteConfig(
     val useOgDesc: Boolean = true,
     val player: String = "iframe",
     val playerAttrs: List<String> = DEFAULT_PLAYER_ATTRS,
-    val categories: List<Pair<String, String>> = listOf("/" to "Terbaru"),
+    /**
+     * Kategori beranda aplikasi: pasangan (path/URL, nama). HANYA kategori yang benar-benar ada
+     * di situs. Tidak ada kategori "Terbaru" otomatis. Kalau dikosongkan, mesin memakai satu
+     * entri "Beranda" (halaman utama situs) supaya plugin tidak kosong sama sekali.
+     * Path relatif ikut domain di mainUrl, jadi aman saat domain diganti lewat domains.yml.
+     */
+    val categories: List<Pair<String, String>> = emptyList(),
 
     // ---- tuning manual per situs (opsional) ----
-    val extraCategories: List<Pair<String, String>> = emptyList(),
     val extraItems: List<String> = emptyList(),
     val extraTitle: List<String> = emptyList(),
     val extraSearch: List<String> = emptyList(),

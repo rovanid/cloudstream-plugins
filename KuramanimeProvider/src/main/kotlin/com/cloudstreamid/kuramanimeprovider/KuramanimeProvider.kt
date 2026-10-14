@@ -29,9 +29,9 @@ class KuramanimeProvider : AdaptiveProvider() {
         useOgDesc = Sel.USE_OG_DESC,
         player = Sel.PLAYER,
         playerAttrs = Sel.PLAYER_ATTRS,
-        // kategori Kuramanime dipakai dari tuning (urutan & paginasi ?page=), bukan hasil auto-detect
-        categories = listOf("/anime?order_by=latest&page={page}" to "Terbaru"),
-        extraCategories = listOf(
+        // Kategori ASLI situs (opsi urutan di /anime). Ditulis manual, tidak ditimpa script.
+        categories = listOf(
+            "/anime?order_by=latest&page={page}" to "Terbaru",
             "/anime?order_by=updated&page={page}" to "Baru Diperbarui",
             "/anime?order_by=popular&page={page}" to "Terpopuler",
             "/anime?order_by=ascending&page={page}" to "A-Z"

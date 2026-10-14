@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
 Deteksi domain baru otomatis dan perbarui domains.yml.
+
+Untuk tiap baris di domains.yml: buka URL-nya, ikuti redirect, dan kalau situs asli
+(halaman memuat nama situs) ternyata pindah ke domain lain, domains.yml diperbarui.
+Kalau situs diblokir bot atau mati, baris dibiarkan (edit manual).
 Setelah ini, apply_domains.py + build akan jalan di workflow.
 """
 import re
@@ -11,7 +15,6 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[2]
 DOMAINS = ROOT / "domains.yml"
-CANDIDATES = ROOT / "candidates.yml"
 
 UA = ("Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36")
@@ -67,13 +70,12 @@ def set_domain(text: str, folder: str, url: str) -> str:
 
 def main() -> None:
     current = read_flat(DOMAINS)
-    cand = read_flat(CANDIDATES) if CANDIDATES.exists() else {}
     text = DOMAINS.read_text(encoding="utf-8")
 
     for folder, cur in current.items():
-        parts = [p.strip() for p in cand.get(folder, "").split("|")]
-        keyword = parts[0] if parts and parts[0] else folder.replace("Provider", "")
-        extra = [p.rstrip("/") for p in parts[1:] if p]
+        # kata kunci = nama plugin (mis. "Kuramanime"); harus ada di halaman supaya
+        # domain parkir/iklan tidak ikut terpilih
+        keyword = folder.replace("Provider", "")
 
         res = probe(cur)
         verdict = judge(res, keyword)
@@ -91,18 +93,7 @@ def main() -> None:
             print(f"[SKIP] {folder}: {cur} diblokir bot (Cloudflare?), tidak diubah")
             continue
 
-        print(f"[MATI] {folder}: {cur} tidak valid, coba kandidat...")
-        for c in extra:
-            if c == cur:
-                continue
-            r = probe(c)
-            if judge(r, keyword) == "ok":
-                final = origin(r[1])
-                print(f"[BARU] {folder}: {cur} -> {final}")
-                text = set_domain(text, folder, final)
-                break
-        else:
-            print(f"[GAGAL] {folder}: tidak ada kandidat valid, edit manual")
+        print(f"[MATI] {folder}: {cur} tidak valid, edit URL-nya di domains.yml")
 
     DOMAINS.write_text(text, encoding="utf-8")
 

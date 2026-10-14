@@ -17,6 +17,6 @@ object Sel {
     const val USE_OG_IMAGE = true
     const val USE_OG_DESC = true
     const val PLAYER = "iframe"
-    val PLAYER_ATTRS = listOf("src", "data-src", "data-lazy-src", "data-litespeed-src", "value", "data-video", "data-embed", "data-iframe", "data-url")
-    val CATEGORIES = listOf("/" to "Terbaru")
+    val PLAYER_ATTRS = listOf("src", "data-src", "data-lazy-src", "data-litespeed-src", "value", "data-video", "data-embed", "data-iframe", "data-url", "data-em")
+    val CATEGORIES: List<Pair<String, String>> = listOf()
 }

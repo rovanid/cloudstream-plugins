@@ -24,7 +24,7 @@ abstract class AdaptiveProvider : MainAPI() {
 
     private val cf by lazy { CloudflareKiller() }
     private var searchTemplate: String? = null
-    private var homeHrefs: Set<String> = emptySet()
+    private var homeHrefs: Set<String>? = null
 
     private val isAnime: Boolean
         get() = supportedTypes.contains(TvType.Anime) || supportedTypes.contains(TvType.AnimeMovie)
@@ -201,13 +201,14 @@ abstract class AdaptiveProvider : MainAPI() {
     }
 
     // ------------------------------------------------------------- halaman utama
+    // Hanya kategori yang didefinisikan di config (kategori asli situs). Tidak ada "Terbaru"
+    // otomatis. Entri "Beranda" hanya cadangan kalau tidak ada satu pun kategori.
     override val mainPage: List<MainPageData>
-        get() = mainPageOf(
-            *(config.categories + config.extraCategories)
-                .distinctBy { it.first }
-                .map { (p, l) -> absUrl(p) to l }
-                .toTypedArray()
-        )
+        get() {
+            val cats = config.categories.distinctBy { it.first }
+                .ifEmpty { listOf("/" to "Beranda") }
+            return mainPageOf(*cats.map { (p, l) -> absUrl(p) to l }.toTypedArray())
+        }
 
     private fun pageUrl(base: String, page: Int): String = when {
         base.contains("{page}") -> base.replace("{page}", page.toString())
@@ -226,14 +227,26 @@ abstract class AdaptiveProvider : MainAPI() {
                 "Daftar kosong. Situs mungkin memblokir akses, domain berubah, atau tampilannya berubah."
             )
         }
-        if (page == 1 && homeHrefs.isEmpty()) homeHrefs = home.map { it.url }.toSet()
         val hasNext = (request.data.contains("{page}") || config.pageStyle != "none") && home.isNotEmpty()
         return newHomePageResponse(request.name, home, hasNext)
     }
 
     // ------------------------------------------------------------------ pencarian
+    /** Tautan kartu di beranda asli situs (dicache). Dipakai untuk menolak "pencarian" palsu. */
+    private suspend fun homepageHrefs(): Set<String> {
+        homeHrefs?.let { return it }
+        val set = try {
+            findCards(fetch(mainUrl), 1).mapNotNull { cardHref(it) }.toSet()
+        } catch (e: Exception) {
+            emptySet()
+        }
+        homeHrefs = set
+        return set
+    }
+
     override suspend fun search(query: String): List<SearchResponse> {
         val q = URLEncoder.encode(query, "UTF-8")
+        val home = homepageHrefs()
         val templates = (listOfNotNull(searchTemplate) + listOf(config.search) + config.extraSearch + BUILTIN_SEARCH)
             .filter { it.isNotBlank() }.distinct()
         for (t in templates) {
@@ -245,7 +258,7 @@ abstract class AdaptiveProvider : MainAPI() {
             val results = findCards(doc, 1).mapNotNull { toSearchResult(it) }.distinctBy { it.url }
             if (results.isEmpty()) continue
             // situs sering mengembalikan beranda untuk parameter yang tidak dikenal
-            if (homeHrefs.isNotEmpty() && results.map { it.url }.toSet() == homeHrefs) continue
+            if (home.isNotEmpty() && results.map { it.url }.toSet() == home) continue
             searchTemplate = t
             return results
         }
@@ -487,18 +500,31 @@ abstract class AdaptiveProvider : MainAPI() {
     // -------------------------------------------------------------------- pemutar
     private fun tryBase64(v: String): String? {
         if (v.length < 12 || !Regex("^[A-Za-z0-9+/=_-]+$").matches(v)) return null
+        val n = v.replace('-', '+').replace('_', '/')
+        val padded = n + "=".repeat((4 - n.length % 4) % 4)
         return try {
-            val d = base64Decode(v)
+            val d = base64Decode(padded)
             if (d.contains("http") || d.contains("<iframe", true)) d else null
         } catch (e: Exception) {
             null
         }
     }
 
+    /** Ubah URL relatif/protocol-relative menjadi absolut terhadap halaman asalnya. */
+    private fun resolveUrl(raw: String, base: String): String? {
+        val r = raw.trim()
+        if (r.isEmpty() || r.startsWith("#") || r.startsWith("javascript", true) ||
+            r.startsWith("data:", true) || r.startsWith("about:", true)
+        ) return null
+        return try {
+            URI(base).resolve(r.replace(" ", "%20")).toString()
+        } catch (e: Exception) {
+            fixUrlNull(r)
+        }
+    }
+
     private fun addEmbedUrl(raw: String, pageUrl: String, out: MutableSet<String>) {
-        var u = raw.trim()
-        if (u.startsWith("//")) u = "https:$u"
-        else if (u.startsWith("/")) u = fixUrl(u)
+        val u = resolveUrl(raw, pageUrl) ?: return
         if (!u.startsWith("http")) return
         if (SKIP_HOSTS.any { u.contains(it, true) }) return
         if (u.trimEnd('/') == pageUrl.trimEnd('/')) return
@@ -530,6 +556,165 @@ abstract class AdaptiveProvider : MainAPI() {
     private fun typeFor(u: String): ExtractorLinkType =
         if (u.contains(".m3u8", true)) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
 
+    private fun qualityOf(vararg hints: String?): Int {
+        for (h in hints) {
+            val m = QUALITY_RE.find(h ?: continue) ?: continue
+            return m.groupValues[1].toInt()
+        }
+        return Qualities.Unknown.value
+    }
+
+    private fun hostLabel(u: String): String {
+        val h = try {
+            URI(u).host?.removePrefix("www.")
+        } catch (e: Exception) {
+            null
+        }
+        return if (h.isNullOrBlank()) name else "$name $h"
+    }
+
+    private fun cleanMedia(u: String): String = u.trimEnd(',', ';', ')', '\\', '.')
+
+    /** Kirim satu tautan langsung ke aplikasi (sekali saja per URL). */
+    private suspend fun emitDirect(
+        url: String,
+        referer: String,
+        label: String,
+        quality: Int?,
+        callback: (ExtractorLink) -> Unit,
+        seen: MutableSet<String>
+    ): Boolean {
+        if (JUNK_MEDIA.containsMatchIn(url) || !seen.add(url)) return false
+        callback.invoke(
+            newExtractorLink(name, label, url, typeFor(url)) {
+                this.referer = referer
+                this.quality = quality ?: qualityOf(url, label)
+            }
+        )
+        return true
+    }
+
+    /** Semua kandidat embed di sebuah halaman situs (iframe, mirror, atribut data-*, base64). */
+    private fun collectEmbeds(doc: Document, pageUrl: String): LinkedHashSet<String> {
+        val embeds = LinkedHashSet<String>()
+        // gabungkan dengan bawaan supaya data-em dkk tidak hilang kalau Selectors.kt tidak memuatnya
+        val attrs = (config.playerAttrs + SiteConfig.DEFAULT_PLAYER_ATTRS).distinct()
+        val sels = (listOf(config.player) + config.extraPlayer + BUILTIN_PLAYER).filter { it.isNotBlank() }.distinct()
+        for (s in sels) {
+            for (el in safeSelect(doc, s)) {
+                for (a in (if (el.tagName() == "a") ANCHOR_ATTRS else attrs)) {
+                    val v = el.attr(a)
+                    if (v.isNotBlank()) addEmbed(v, pageUrl, embeds)
+                }
+            }
+        }
+        return embeds
+    }
+
+    /** <video><source> yang langsung ada di halaman. */
+    private suspend fun pageSources(
+        doc: Document,
+        pageUrl: String,
+        label: String,
+        callback: (ExtractorLink) -> Unit,
+        seen: MutableSet<String>
+    ): Boolean {
+        var ok = false
+        for (src in doc.select("video source[src], video[src]")) {
+            val u = resolveUrl(src.attr("src"), pageUrl) ?: continue
+            if (!u.startsWith("http")) continue
+            val q = src.attr("size").toIntOrNull() ?: src.attr("res").toIntOrNull()
+            ok = emitDirect(u, pageUrl, label, q, callback, seen) || ok
+        }
+        return ok
+    }
+
+    /**
+     * Mengubah satu embed menjadi tautan putar:
+     *  1. extractor bawaan CloudStream (kalau host dikenal),
+     *  2. kalau tidak ada hasil: buka halaman embed, cari m3u8/mp4 (termasuk JS yang di-pack),
+     *  3. kalau masih kosong: ikuti iframe di dalam embed (maksimal MAX_EMBED_DEPTH tingkat).
+     * Semua langkah dibungkus try/catch supaya satu host rusak tidak menggagalkan host lain.
+     */
+    private suspend fun resolveEmbed(
+        embed: String,
+        referer: String,
+        depth: Int,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit,
+        seen: MutableSet<String>,
+        visited: MutableSet<String>
+    ): Boolean {
+        if (!visited.add(embed)) return false
+        val label = hostLabel(embed)
+        if (isDirect(embed)) return emitDirect(embed, referer, label, null, callback, seen)
+
+        val viaExtractor = try {
+            loadExtractor(embed, referer, subtitleCallback, callback)
+        } catch (e: Exception) {
+            false
+        }
+        if (viaExtractor) return true
+        if (depth >= MAX_EMBED_DEPTH) return false
+
+        val html = try {
+            app.get(embed, referer = referer).text
+        } catch (e: Exception) {
+            return false
+        }
+
+        val body = html.replace("\\/", "/")
+        val unpacked = if (body.contains("eval(function(p,a,c,k,e,d)")) {
+            try {
+                getAndUnpack(body).replace("\\/", "/")
+            } catch (e: Exception) {
+                ""
+            }
+        } else ""
+
+        var ok = false
+        for (m in MEDIA_RE.findAll(body + "\n" + unpacked)) {
+            val u = cleanMedia(m.value)
+            if (SKIP_HOSTS.any { u.contains(it, true) }) continue
+            ok = emitDirect(u, embed, label, null, callback, seen) || ok
+        }
+
+        val parsed = Jsoup.parse(html)
+        ok = pageSources(parsed, embed, label, callback, seen) || ok
+        if (ok) return true
+
+        val nested = LinkedHashSet<String>()
+        for (e in parsed.select("iframe[src], iframe[data-src]")) {
+            addEmbedUrl(e.attr("src").ifBlank { e.attr("data-src") }, embed, nested)
+        }
+        for (n in nested) {
+            ok = resolveEmbed(n, embed, depth + 1, subtitleCallback, callback, seen, visited) || ok
+        }
+        return ok
+    }
+
+    /** Terakhir: URL bergaya embed yang tertulis di dalam script halaman. */
+    private fun scriptEmbedCandidates(doc: Document, pageUrl: String): List<String> {
+        val out = LinkedHashSet<String>()
+        val html = doc.html().replace("\\/", "/")
+        for (m in SCRIPT_EMBED_RE.findAll(html)) {
+            val u = m.value.trimEnd(',', ';', ')', '\\')
+            if (ASSET_EXT.containsMatchIn(u)) continue
+            addEmbedUrl(u, pageUrl, out)
+        }
+        return out.toList()
+    }
+
+    /** Tombol "Nonton/Tonton" yang membuka halaman pemutar terpisah (bukan menu navigasi). */
+    private fun watchLinks(doc: Document, pageUrl: String): List<String> =
+        doc.select("a[href]")
+            .filter { a -> a.parents().none { it.tagName() in NAV_TAGS } }
+            .filter { WATCH_TEXT.containsMatchIn(it.text()) }
+            .mapNotNull { resolveUrl(it.attr("href"), pageUrl) }
+            .filter { it.startsWith("http") && it.trimEnd('/') != pageUrl.trimEnd('/') && !isRootOrJunk(it) }
+            .distinct()
+            .take(2)
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -537,52 +722,42 @@ abstract class AdaptiveProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val doc = fetch(data)
-        var ok = false
+        val seen = HashSet<String>()      // URL yang sudah dikirim ke aplikasi
+        val visited = HashSet<String>()   // embed yang sudah dibuka
+        var ok = pageSources(doc, data, name, callback, seen)
 
-        // <video><source size=720> (Kuramanime dan sejenisnya)
-        for (src in doc.select("video source[src], video[src]")) {
-            val u = fixUrlNull(src.attr("src").trim()) ?: continue
-            val q = src.attr("size").toIntOrNull() ?: src.attr("res").toIntOrNull()
-            callback.invoke(
-                newExtractorLink(name, name, u, typeFor(u)) {
-                    this.referer = "$mainUrl/"
-                    this.quality = q ?: Qualities.Unknown.value
-                }
-            )
-            ok = true
+        for (u in collectEmbeds(doc, data)) {
+            ok = resolveEmbed(u, data, 0, subtitleCallback, callback, seen, visited) || ok
         }
 
-        val embeds = LinkedHashSet<String>()
-        val sels = (listOf(config.player) + config.extraPlayer + BUILTIN_PLAYER).filter { it.isNotBlank() }.distinct()
-        for (s in sels) {
-            for (el in safeSelect(doc, s)) {
-                val attrs = if (el.tagName() == "a") ANCHOR_ATTRS else config.playerAttrs
-                for (a in attrs) {
-                    val v = el.attr(a)
-                    if (v.isNotBlank()) addEmbed(v, data, embeds)
+        // pemutar ada di halaman lain (tombol "Nonton")
+        if (!ok) {
+            for (w in watchLinks(doc, data)) {
+                val d = try {
+                    fetch(w, data)
+                } catch (e: Exception) {
+                    continue
                 }
+                ok = pageSources(d, w, name, callback, seen) || ok
+                for (u in collectEmbeds(d, w)) {
+                    ok = resolveEmbed(u, w, 0, subtitleCallback, callback, seen, visited) || ok
+                }
+                if (ok) break
             }
         }
 
-        if (embeds.isEmpty() && !ok) {
+        // cadangan: media langsung / URL embed yang tertulis di script
+        if (!ok) {
             val html = doc.html().replace("\\/", "/")
-            for (m in Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4)[^\s"'<>\\]*""").findAll(html)) {
-                addEmbedUrl(m.value, data, embeds)
+            for (m in MEDIA_RE.findAll(html)) {
+                val u = cleanMedia(m.value)
+                if (SKIP_HOSTS.any { u.contains(it, true) }) continue
+                ok = emitDirect(u, data, name, null, callback, seen) || ok
             }
         }
-
-        for (u in embeds) {
-            if (isDirect(u)) {
-                callback.invoke(
-                    newExtractorLink(name, name, u, typeFor(u)) {
-                        this.referer = "$mainUrl/"
-                        this.quality = Qualities.Unknown.value
-                    }
-                )
-                ok = true
-            } else {
-                val r = loadExtractor(u, data, subtitleCallback, callback)
-                ok = ok || r
+        if (!ok) {
+            for (u in scriptEmbedCandidates(doc, data).take(8)) {
+                ok = resolveEmbed(u, data, 0, subtitleCallback, callback, seen, visited) || ok
             }
         }
         return ok
@@ -591,7 +766,19 @@ abstract class AdaptiveProvider : MainAPI() {
     companion object {
         private val NAV_TAGS = setOf("header", "footer", "nav", "aside")
         private val IMG_ATTRS = listOf("data-src", "data-lazy-src", "data-original", "data-lazyload", "data-setbg", "data-bg", "src")
-        private val ANCHOR_ATTRS = listOf("data-url", "data-src", "data-iframe", "data-embed", "data-em", "href")
+        private val ANCHOR_ATTRS = listOf(
+            "data-url", "data-src", "data-iframe", "data-embed", "data-em", "data-link", "data-player", "href"
+        )
+        private const val MAX_EMBED_DEPTH = 3
+        private val MEDIA_RE = Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4)[^\s"'<>\\]*""")
+        private val QUALITY_RE = Regex("(?<!\\d)(2160|1440|1080|720|480|360|240)(?!\\d)")
+        private val JUNK_MEDIA = Regex("(?i)(doubleclick|/ads?/|adserver|banner|promo|sprite)")
+        private val WATCH_TEXT = Regex("(?i)\\b(nonton|tonton|watch|play|streaming)\\b")
+        private val ASSET_EXT = Regex("(?i)\\.(js|css|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|json|xml|php)(\\?|$)")
+        private val SCRIPT_EMBED_RE = Regex(
+            """https?://[^\s"'<>\\]+(?:embed|/e/|/v/|player|iframe|stream)[^\s"'<>\\]*""",
+            RegexOption.IGNORE_CASE
+        )
         private val JUNK_FIRST_SEGMENTS = setOf(
             "genre", "genres", "category", "kategori", "tag", "page", "author", "login", "register",
             "daftar", "dmca", "contact", "kontak", "about", "privacy", "feed", "search", "jadwal", "schedule"

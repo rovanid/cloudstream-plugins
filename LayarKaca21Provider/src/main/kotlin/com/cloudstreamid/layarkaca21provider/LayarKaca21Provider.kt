@@ -29,15 +29,15 @@ class LayarKaca21Provider : AdaptiveProvider() {
         useOgDesc = Sel.USE_OG_DESC,
         player = Sel.PLAYER,
         playerAttrs = Sel.PLAYER_ATTRS,
-        categories = Sel.CATEGORIES,
-        extraItems = listOf("article"),
-        extraTitle = listOf(".poster-title", "h3"),
-        extraDesc = listOf(".synopsis", "blockquote"),
-        extraPlayer = listOf("ul#player-list li a", "iframe#main-player", "#player-list a"),
-        extraCategories = listOf(
+        // Kategori ASLI situs (ditulis manual, tidak ditimpa script). Tanpa "Terbaru" otomatis.
+        categories = listOf(
             "/populer/page/{page}" to "Terpopuler",
             "/rating/page/{page}" to "Rating Tertinggi",
             "/latest/page/{page}" to "Upload Terbaru"
         ),
+        extraItems = listOf("article"),
+        extraTitle = listOf(".poster-title", "h3"),
+        extraDesc = listOf(".synopsis", "blockquote"),
+        extraPlayer = listOf("ul#player-list li a", "iframe#main-player", "#player-list a"),
     )
 }

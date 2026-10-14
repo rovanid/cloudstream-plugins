@@ -45,7 +45,7 @@ CAT_BAD = re.compile(r"login|register|daftar|dmca|contact|kontak|about|privacy|j
                      r"schedule|request|wp-|feed|#|\.xml|disclaimer|faq|tos|terms", re.I)
 PLAYER_CANDS = ["iframe", "option[value]", "[data-video]", "[data-embed]", "[data-iframe]", "[data-url]"]
 PLAYER_ATTRS = ["src", "data-src", "data-lazy-src", "data-litespeed-src", "value",
-                "data-video", "data-embed", "data-iframe", "data-url"]
+                "data-video", "data-embed", "data-iframe", "data-url", "data-em"]
 
 
 class Blocked(Exception):
@@ -236,9 +236,11 @@ def detect_categories(base, home_soup, item_sel, home_hrefs, limit=8):
         if CAT_BAD.search(key) or CAT_BAD.search(text) or not (CAT_OK.search(key) or CAT_OK.search(text)):
             continue
         found.setdefault(key, text)
-    cats = [("/", "Terbaru")]
+    # Hanya kategori dari menu situs sendiri yang TERVERIFIKASI berisi daftar item.
+    # Tidak ada entri "Terbaru" otomatis.
+    cats = []
     for key, text in list(found.items())[:limit * 2]:
-        if len(cats) > limit:
+        if len(cats) >= limit:
             break
         res = fetch(base + key)
         if not res:
@@ -342,7 +344,7 @@ def detect_site(base: str) -> dict:
     d = {"PAGE_PARAM": "page", "PAGE_STYLE": "none", "SEARCH": "", "TITLE": "", "POSTER": "",
          "DESC": "", "GENRE": "", "EPISODE": "", "EPISODES_DESC": True,
          "USE_OG_IMAGE": True, "USE_OG_DESC": True, "PLAYER": "iframe",
-         "CATEGORIES": [("/", "Terbaru")]}
+         "CATEGORIES": []}
     items = find_items(home)
     if not items:
         raise RuntimeError("daftar item tidak ditemukan (kemungkinan dimuat lewat JavaScript)")
@@ -398,7 +400,7 @@ def score(d: dict) -> int:
     s = 1  # ITEM
     s += bool(d["TITLE"]) + bool(d["SEARCH"]) + (d["PAGE_STYLE"] != "none")
     s += bool(d["DESC"] or d["USE_OG_DESC"]) + bool(d["GENRE"]) + bool(d["EPISODE"])
-    s += bool(d.get("_player_found")) + (len(d["CATEGORIES"]) > 1)
+    s += bool(d.get("_player_found")) + (len(d["CATEGORIES"]) > 0)
     return s
 
 
@@ -409,6 +411,7 @@ def kstr(s: str) -> str:
 
 def render(pkg: str, d: dict, date: str) -> str:
     cats = ",\n        ".join(f"{kstr(p)} to {kstr(n)}" for p, n in d["CATEGORIES"])
+    cats_block = f"\n        {cats}\n    " if cats else ""
     attrs = ", ".join(kstr(a) for a in PLAYER_ATTRS)
     b = lambda v: "true" if v else "false"
     return f"""// @auto-detect | detected: {date} | score: {score(d)}
@@ -431,9 +434,7 @@ object Sel {{
     const val USE_OG_DESC = {b(d["USE_OG_DESC"])}
     const val PLAYER = {kstr(d["PLAYER"])}
     val PLAYER_ATTRS = listOf({attrs})
-    val CATEGORIES = listOf(
-        {cats}
-    )
+    val CATEGORIES: List<Pair<String, String>> = listOf({cats_block})
 }}
 """
 

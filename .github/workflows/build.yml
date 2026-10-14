@@ -52,7 +52,7 @@ jobs:
       - name: Terapkan domains.yml
         run: |
           cd src
-          python3 .github/scripts/new_plugins.py
+          python3 .github/scripts/sync_plugins.py
           python3 .github/scripts/apply_domains.py
           # repo.json otomatis sesuai nama repo GitHub ini (format manifest CloudStream)
           python3 .github/scripts/generate_json.py repo

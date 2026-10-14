@@ -1,7 +1,15 @@
-# Domain aktif tiap provider. Diperbarui otomatis oleh check_domains.py
-# dan diterapkan ke source Kotlin oleh apply_domains.py.
+# ============================================================
+# SATU-SATUNYA file yang perlu Anda edit untuk mengelola plugin.
+#
 # Format:  NamaFolder: https://domain
-# (Format "kata_kunci | url" HANYA untuk candidates.yml, bukan di sini.)
+#
+#   UPDATE : ganti URL di baris yang ada (mainUrl & versi plugin naik otomatis)
+#   HAPUS  : hapus barisnya (atau beri # di depan) -> folder plugin ikut terhapus
+#   TAMBAH : tulis baris baru (nama harus huruf/angka & berakhiran "Provider")
+#            jenis film/serial: tulis "NamaFolder: movie" di plugin_types.yml
+#
+# check_domains.py juga memperbarui URL di sini sendiri kalau situs redirect ke domain baru.
+# ============================================================
 AnimeSailProvider: https://anisail.com
 KuramanimeProvider: https://v20.kuramanime.ing
 OtakudesuProvider: https://otakudesu.blog

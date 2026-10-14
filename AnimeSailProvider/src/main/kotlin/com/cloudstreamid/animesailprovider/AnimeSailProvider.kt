@@ -29,7 +29,11 @@ class AnimeSailProvider : AdaptiveProvider() {
         useOgDesc = Sel.USE_OG_DESC,
         player = Sel.PLAYER,
         playerAttrs = Sel.PLAYER_ATTRS,
-        categories = Sel.CATEGORIES,
+        // Kategori ASLI situs (ditulis manual, tidak ditimpa script). Tanpa "Terbaru" otomatis.
+        categories = listOf(
+            "/movie-terbaru/page/{page}/" to "Movie Terbaru",
+            "/genres/donghua/page/{page}/" to "Donghua"
+        ),
         // Beranda AnimeSail berisi halaman EPISODE; load() otomatis naik ke halaman seri /anime/slug/
         extraItems = listOf("div.listupd article", "article.bs"),
         extraTitle = listOf(".tt h2"),
@@ -38,9 +42,5 @@ class AnimeSailProvider : AdaptiveProvider() {
         extraEpisode = listOf("ul.daftar li a"),
         extraPlayer = listOf(".mobius .mirror option", "select.mirror option"),
         extraDesc = listOf(".entry-content p"),
-        extraCategories = listOf(
-            "/movie-terbaru/page/{page}/" to "Movie Terbaru",
-            "/genres/donghua/page/{page}/" to "Donghua"
-        ),
     )
 }

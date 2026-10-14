@@ -29,7 +29,11 @@ class OtakudesuProvider : AdaptiveProvider() {
         useOgDesc = Sel.USE_OG_DESC,
         player = Sel.PLAYER,
         playerAttrs = Sel.PLAYER_ATTRS,
-        categories = Sel.CATEGORIES,
+        // Kategori ASLI situs (ditulis manual, tidak ditimpa script). Tanpa "Terbaru" otomatis.
+        categories = listOf(
+            "/ongoing-anime/page/{page}/" to "Ongoing",
+            "/complete-anime/page/{page}/" to "Completed"
+        ),
         // Beranda berisi episode terbaru; load() mencari tautan "/anime/..." induknya
         extraItems = listOf("div.venz ul li", "ul.chivsrc li"),
         extraTitle = listOf(".jdlflm", "h2"),
@@ -40,9 +44,5 @@ class OtakudesuProvider : AdaptiveProvider() {
         extraDesc = listOf(".sinopc"),
         extraGenre = listOf(".infozingle a[href*='/genres/']"),
         extraPlayer = listOf("#embed_holder iframe", ".responsive-embed-stream iframe"),
-        extraCategories = listOf(
-            "/ongoing-anime/page/{page}/" to "Ongoing",
-            "/complete-anime/page/{page}/" to "Completed"
-        ),
     )
 }
