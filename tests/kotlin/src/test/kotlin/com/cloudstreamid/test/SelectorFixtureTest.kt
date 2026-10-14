@@ -22,23 +22,23 @@ class SelectorFixtureTest {
         val player: String,
     )
 
-    private val sites = listOf(
-        Site(
-            "AnimeSailProvider",
-            com.cloudstreamid.animesailprovider.Sel.ITEM, com.cloudstreamid.animesailprovider.Sel.TITLE,
-            com.cloudstreamid.animesailprovider.Sel.EPISODE, com.cloudstreamid.animesailprovider.Sel.PLAYER
-        ),
-        Site(
-            "KuronimeProvider",
-            com.cloudstreamid.kuronimeprovider.Sel.ITEM, com.cloudstreamid.kuronimeprovider.Sel.TITLE,
-            com.cloudstreamid.kuronimeprovider.Sel.EPISODE, com.cloudstreamid.kuronimeprovider.Sel.PLAYER
-        ),
-        Site(
-            "LayarKaca21Provider",
-            com.cloudstreamid.layarkaca21provider.Sel.ITEM, com.cloudstreamid.layarkaca21provider.Sel.TITLE,
-            com.cloudstreamid.layarkaca21provider.Sel.EPISODE, com.cloudstreamid.layarkaca21provider.Sel.PLAYER
-        ),
-    )
+    /**
+     * Daftar plugin diambil dari folder *Provider yang ada di root repo (bukan daftar tetap), lalu
+     * `object Sel` tiap plugin dibaca lewat refleksi. Plugin yang folder/Selectors.kt-nya sudah tidak ada
+     * otomatis tidak diuji.
+     */
+    private val sites: List<Site> = (File("../..").listFiles { f -> f.isDirectory && f.name.endsWith("Provider") }
+        ?.sortedBy { it.name } ?: emptyList())
+        .mapNotNull { dir ->
+            val cls = try {
+                Class.forName("com.cloudstreamid.${dir.name.lowercase()}.Sel")
+            } catch (e: ClassNotFoundException) {
+                println("[LEWATI] ${dir.name}: Selectors.kt tidak ditemukan")
+                return@mapNotNull null
+            }
+            fun str(field: String): String = cls.getField(field).get(null) as String
+            Site(dir.name, str("ITEM"), str("TITLE"), str("EPISODE"), str("PLAYER"))
+        }
 
     private fun fixture(site: String, kind: String): Document? {
         val f = File("fixtures/$site/$kind.html")
