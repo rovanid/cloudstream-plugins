@@ -8,3 +8,5 @@ Selesai: izin PR diaktifkan dan `domain-watch.yml` dijalankan (hasil di `lanjut.
 5. Tahap 5: monitoring per domain + GitHub Issue (dedup/cooldown/pulih), Telegram/Discord opsional. Catatan: AnimeSail/LayarKaca21 selalu 403 dari CI, jadi pantau dengan keadaan "BLOCKED" tersendiri, jangan dihitung gagal.
 6. Tahap 6: prerelease dulu, riwayat build untuk rollback (ganti `--amend` + force push); patok versi Kotlin/Gradle/cloudstream3.
 7. Rapikan `health.yml` (hapus `|| true`, konflik push dengan `build.yml`).
+
+8. (Selesai sesi ini) `.gitignore` kini mengabaikan `__pycache__/` dan `*.pyc`; runner dipatok `ubuntu-24.04` (ubuntu-latest pindah ke Ubuntu 26 mulai 19 Okt 2026). Pengguna: jalankan `git rm -r --cached .github/scripts/__pycache__` bila folder itu masih ada di repo. Build #23, health #2, domain-watch #2 sukses di Actions.

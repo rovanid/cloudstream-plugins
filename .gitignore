@@ -9,3 +9,6 @@
 .externalNativeBuild
 .cxx
 *.cs3
+
+__pycache__/
+*.pyc

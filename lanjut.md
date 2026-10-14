@@ -1,6 +1,6 @@
 # lanjut.md — dokumen utama kesinambungan proyek
 
-Diperbarui: 14 Okt 2026 (sesi tahap 3). Dokumen ini adalah SUMBER UTAMA. `PROJECT_STATE.md` (status fitur) dan `NEXT_STEPS.md` (tugas) melengkapinya; `docs/AUDIT.md` berisi temuan audit.
+Diperbarui: 14 Okt 2026 (sesi tahap 3 + patch kecil). Dokumen ini adalah SUMBER UTAMA. `PROJECT_STATE.md` (status fitur) dan `NEXT_STEPS.md` (tugas) melengkapinya; `docs/AUDIT.md` berisi temuan audit.
 
 ## 1. Proyek
 Repo plugin CloudStream (`rovanid/cloudstream-plugins`, dari `repo.json`) untuk sumber anime/film berbahasa Indonesia. Sasaran: domain di `domains.yml` dikelola otomatis dan aman; metadata dan pemutaran video benar; ada pemantauan, notifikasi, dan CI/CD.
@@ -52,6 +52,12 @@ Domain: `domain-watch.yml` → `check_domains.py --apply` → registry+tes → P
 - GitHub Actions nyata (dilaporkan pengguna lewat screenshot): izin "Allow GitHub Actions to create and approve pull requests" sudah dicentang; `domain-watch.yml` jalan sukses (6 dtk) dan tes registry 27/27 lulus. Hasil domain: AnimeSail (`anisail.com`) dan LayarKaca21 (`tv12.lk21official.cc`) BLOCKED HTTP 403 dari CI (tidak bisa diverifikasi, domains.yml tidak diubah); Kuronime (`kuronime.sbs`) OK. Tidak ada usulan sehingga PR belum pernah dibuat: jalur pembuatan PR belum teruji.
 - Catatan: dua dari tiga sumber tidak bisa dipantau dari runner GitHub karena memblokir bot; pemantauan domain mereka praktis manual.
 
+## 7b. Hasil Actions nyata tambahan (14 Okt 2026, laporan pengguna lewat screenshot)
+- `build.yml` #23 sukses (1m33s): `settings.gradle.kts` lolos Gradle; step "Naikkan versi" menulis `[SAMA]` untuk ketiga plugin (baseline, wajar); bot meng-commit hasil build.
+- `health.yml` #2 sukses: AnimeSail/LayarKaca21 BLOCKED (bot), Kuronime PARTIAL (embed hidup, video tidak bisa diekstrak script; cek manual di aplikasi).
+- `domain-watch.yml` #2 (manual) sukses: hasil sama seperti bagian 7, tanpa usulan; jalur PR masih belum teruji.
+- Temuan + perbaikan (belum diuji di Actions): `__pycache__` ikut ter-commit karena `git add -A` -> `.gitignore` ditambah `__pycache__/` dan `*.pyc` (folder lama perlu `git rm -r --cached .github/scripts/__pycache__`). `ubuntu-latest` pindah ke Ubuntu 26 mulai 19 Okt 2026 -> semua workflow dipatok `ubuntu-24.04`. Peringatan Node.js 20 deprecated pada actions v4/v5 belum ditangani.
+
 ## 8. Masalah terbuka
 Lihat `docs/AUDIT.md` temuan 6–11 (3 dan 4 selesai di kode, belum diuji di Actions). Khusus: `plugin_hashes.json` baru terisi baseline; di build nyata pertama, `detect_selectors.py` bisa mengubah Selectors.kt sehingga versi naik (itu benar). PR buatan `GITHUB_TOKEN` tidak memicu `pr-check.yml` (gerbang tes sudah ada di dalam `domain-watch.yml`); `health.yml` masih `|| true` pada push.
 
@@ -62,7 +68,7 @@ Satu repo public cukup; tidak ada repo tambahan. Domain baru lewat PR agar ada r
 Belum ada yang wajib. Direncanakan (opsional, tahap 5): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `DISCORD_WEBHOOK_URL`. Setting repo: izinkan Actions membuat PR.
 
 ## 11. Workflow
-`build.yml` (push main + tiap 6 jam), `health.yml` (tiap 12 jam, uji pemutaran), `domain-watch.yml` (tiap 6 jam), `pr-check.yml` (PR). Publish masih `git push --force` ke `builds` (belum ada rollback).
+(Semua berjalan di `ubuntu-24.04`.) `build.yml` (push main + tiap 6 jam), `health.yml` (tiap 12 jam, uji pemutaran), `domain-watch.yml` (tiap 6 jam), `pr-check.yml` (PR). Publish masih `git push --force` ke `builds` (belum ada rollback).
 
 ## 12. Tugas berikutnya
 Lihat `NEXT_STEPS.md`.
