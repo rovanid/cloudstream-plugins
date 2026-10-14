@@ -13,9 +13,16 @@ Aturan:
   - Hasil baru yang skornya lebih rendah dari hasil lama tidak menimpa (anti-downgrade).
   - Situs yang memblokir bot (Cloudflare) atau memuat daftar lewat JavaScript tidak bisa
     dideteksi; hasilnya dicatat di detection_report.md dan file lama dibiarkan.
+  - MODE FIXTURE: kalau tests/kotlin/fixtures/<Plugin>/list.html ada, selector dideteksi dari
+    file HTML itu (list.html, detail.html, episode.html; format MHTML dari Chrome "Simpan halaman"
+    juga dibaca), BUKAN dari situs langsung. Jadi situs yang memblokir bot atau memuat daftar lewat
+    JavaScript tetap bisa dideteksi. Pagination/pencarian/kategori tetap dicoba lewat jaringan
+    (kalau gagal, dikosongkan). Fixture baru/berubah (sidik jari di header) memicu deteksi ulang
+    dan boleh menimpa hasil lama walau skornya lebih rendah.
 Butuh: pip install beautifulsoup4
 """
 import datetime
+import hashlib
 import os
 import re
 import sys
@@ -35,7 +42,9 @@ DELAY = float(os.environ.get("DETECT_DELAY", "0.5"))
 UA = ("Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36")
 
-HEADER_RE = re.compile(r"^// @auto-detect(?:\s*\|\s*detected:\s*(\S+))?(?:\s*\|\s*score:\s*(\d+))?")
+HEADER_RE = re.compile(r"^// @auto-detect(?:\s*\|\s*detected:\s*(\S+))?(?:\s*\|\s*score:\s*(\d+))?(?:\s*\|\s*fixtures:\s*(\w+))?")
+FIXTURES = ROOT / "tests" / "kotlin" / "fixtures"
+FIXTURE_KINDS = ("list", "detail", "episode")
 EP_RE = re.compile(r"(episode|\beps?\b[ ._-]?\d+|\bep[ ._-]?\d+|chapter|/eps?[-/])", re.I)
 SKIP_PLAYER = re.compile(r"facebook\.com|disqus\.com|googletagmanager|recaptcha", re.I)
 CAT_OK = re.compile(r"genre|categor|kategori|series|movie|film|anime|ongoing|complete|"
@@ -334,6 +343,95 @@ def detect_player(soup, base) -> str:
     return ",".join(good)
 
 
+# --------------------------------------------------------------- fixture
+def extract_html(raw: str) -> str:
+    """Chrome 'Simpan halaman' berformat MHTML (Saved by Blink): ambil bagian text/html pertama."""
+    if not raw.lstrip().startswith("From:") or "Saved by Blink" not in raw:
+        return raw
+    m = re.search(r'boundary="?([^"\r\n;]+)"?', raw)
+    if not m:
+        return raw
+    for part in raw.split("--" + m.group(1))[1:]:
+        sep = re.search(r"\r?\n\r?\n", part)
+        if not sep:
+            continue
+        if re.search(r"(?i)content-type:\s*text/html", part[:sep.start()]):
+            return part[sep.end():]
+    return raw
+
+
+def fixture_paths(name: str) -> dict:
+    d = FIXTURES / name
+    return {k: d / f"{k}.html" for k in FIXTURE_KINDS if (d / f"{k}.html").is_file()}
+
+
+def fixture_hash(name: str) -> str:
+    """Sidik jari isi fixture; kosong kalau list.html tidak ada (mode fixture tidak aktif)."""
+    paths = fixture_paths(name)
+    if "list" not in paths:
+        return ""
+    h = hashlib.sha1()
+    for k in FIXTURE_KINDS:
+        if k in paths:
+            h.update(k.encode())
+            h.update(paths[k].read_bytes())
+    return h.hexdigest()[:8]
+
+
+def load_fixtures(name: str) -> dict:
+    return {k: BeautifulSoup(extract_html(p.read_text(encoding="utf-8", errors="ignore")), "html.parser")
+            for k, p in fixture_paths(name).items()}
+
+
+def detect_from_fixtures(base: str, fx: dict) -> dict:
+    """Seperti detect_site, tetapi struktur HTML dibaca dari fixture, bukan dari situs."""
+    home = fx["list"]
+    d = {"PAGE_PARAM": "page", "PAGE_STYLE": "none", "SEARCH": "", "TITLE": "", "POSTER": "",
+         "DESC": "", "GENRE": "", "EPISODE": "", "EPISODES_DESC": True,
+         "USE_OG_IMAGE": True, "USE_OG_DESC": True, "PLAYER": "iframe",
+         "CATEGORIES": [], "_source": "fixture"}
+    items = find_items(home)
+    if not items:
+        raise RuntimeError("daftar item tidak ditemukan di list.html (fixture bukan halaman daftar, "
+                           "atau daftarnya dimuat JavaScript sehingga tidak ikut tersimpan)")
+    item_sel, cards = items
+    d["ITEM"] = item_sel
+    d["TITLE"] = detect_title(cards)
+    first_hrefs = hrefs_of(home, item_sel, base)
+
+    # Pagination, pencarian, kategori perlu diuji ke situs; kalau diblokir/gagal tetap kosong.
+    first = cards[0]
+    known_href = norm(base, card_href(first))
+    known_title = (first.select_one(d["TITLE"]).get_text(" ", strip=True) if d["TITLE"] and first.select_one(d["TITLE"])
+                   else (first.find("a", title=True) or {}).get("title", "") or
+                   (first.find("img", alt=True) or {}).get("alt", "") or "a")
+    try:
+        d["PAGE_STYLE"], d["PAGE_PARAM"] = detect_paging(base, item_sel, first_hrefs)
+        d["SEARCH"] = detect_search(base, home, item_sel, known_title, known_href, first_hrefs)
+        d["CATEGORIES"] = detect_categories(base, home, item_sel, first_hrefs)
+    except Exception as e:  # jaringan bermasalah tidak boleh menggagalkan hasil fixture
+        print(f"  (jaringan dilewati: {e})")
+
+    detail = fx.get("detail")
+    if detail is not None:
+        og_img, og_desc = meta(detail, "og:image"), meta(detail, "og:description")
+        d["USE_OG_IMAGE"] = bool(og_img) and og_img != meta(home, "og:image")
+        d["USE_OG_DESC"] = bool(og_desc) and og_desc != meta(home, "og:description")
+        d["DESC"] = first_ok(detail, [".synopsis", ".sinopsis", "[itemprop=description]", ".description",
+                                      ".desc", ".summary", ".entry-content p"])
+        if not d["USE_OG_IMAGE"]:
+            d["POSTER"] = detect_poster(detail)
+        d["GENRE"] = detect_genre(detail)
+        d["EPISODE"], d["EPISODES_DESC"] = detect_episodes(detail, base + "/")
+
+    player_page = fx.get("episode") or (detail if not d["EPISODE"] else None)
+    d_player = detect_player(player_page, base) if player_page is not None else ""
+    if d_player:
+        d["PLAYER"] = d_player
+    d["_player_found"] = bool(d_player)
+    return d
+
+
 # ---------------------------------------------------------- satu plugin
 def detect_site(base: str) -> dict:
     res = fetch(base, strict=True)
@@ -408,12 +506,13 @@ def kstr(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$") + '"'
 
 
-def render(pkg: str, d: dict, date: str) -> str:
+def render(pkg: str, d: dict, date: str, fx_hash: str = "") -> str:
     cats = ",\n        ".join(f"{kstr(p)} to {kstr(n)}" for p, n in d["CATEGORIES"])
     cats_block = f"\n        {cats}\n    " if cats else ""
     attrs = ", ".join(kstr(a) for a in PLAYER_ATTRS)
     b = lambda v: "true" if v else "false"
-    return f"""// @auto-detect | detected: {date} | score: {score(d)}
+    fx = f" | fixtures: {fx_hash}" if fx_hash else ""
+    return f"""// @auto-detect | detected: {date} | score: {score(d)}{fx}
 // File ini dibuat/diperbarui otomatis oleh .github/scripts/detect_selectors.py.
 // Hapus baris "@auto-detect" di baris pertama untuk MENGUNCI dan mengedit manual.
 package com.cloudstreamid.{pkg}
@@ -465,7 +564,9 @@ def main() -> int:
             rows.append((name, "dikunci manual", None))
             continue
         stamp, old_score = m.group(1), int(m.group(2) or 0)
-        due = force or stamp in (None, "default")
+        fx_hash = fixture_hash(name)
+        fx_changed = bool(fx_hash) and fx_hash != m.group(3)
+        due = force or fx_changed or stamp in (None, "default")
         if not due:
             try:
                 due = (today - datetime.date.fromisoformat(stamp)).days >= REFRESH_DAYS
@@ -478,7 +579,7 @@ def main() -> int:
 
         base = url.rstrip("/")
         try:
-            d = detect_site(base)
+            d = detect_from_fixtures(base, load_fixtures(name)) if fx_hash else detect_site(base)
         except Blocked:
             print(f"[BLOKIR] {name}: situs memblokir bot, selector tidak diubah")
             rows.append((name, "diblokir bot (Cloudflare?), tidak bisa dideteksi otomatis", None))
@@ -489,31 +590,32 @@ def main() -> int:
             continue
 
         new_score = score(d)
-        if stamp not in (None, "default") and new_score < old_score:
+        if not fx_changed and stamp not in (None, "default") and new_score < old_score:
             print(f"[TURUN] {name}: skor {new_score} < {old_score}, hasil lama dipertahankan")
             rows.append((name, f"skor turun ({new_score} < {old_score}), hasil lama dipertahankan", None))
             continue
 
         pkg = sel_file.parent.name
-        new_text = render(pkg, d, str(today))
+        new_text = render(pkg, d, str(today), fx_hash)
         changed = old.split("\n", 1)[1:] != new_text.split("\n", 1)[1:]
         sel_file.write_text(new_text, encoding="utf-8")
-        print(f"[{'UBAH' if changed else 'SAMA'}] {name}: skor {new_score}/9")
+        print(f"[{'UBAH' if changed else 'SAMA'}] {name}: skor {new_score}/9"
+              + (f" (dari fixture {fx_hash})" if fx_hash else ""))
         # version dinaikkan oleh bump_versions.py (jalan sesudah skrip ini)
         rows.append((name, "ok", d))
 
     lines = ["# Laporan deteksi selector", "",
              "Dibuat otomatis oleh `detect_selectors.py`. Tanda ❌ berarti perlu disetel manual "
              "(hapus baris `@auto-detect` di `Selectors.kt` lalu edit).", "",
-             "| Plugin | Item | Judul | Cari | Halaman | Kategori | Deskripsi | Genre | Episode | Pemutar |",
-             "|---|---|---|---|---|---|---|---|---|---|"]
+             "| Plugin | Sumber | Item | Judul | Cari | Halaman | Kategori | Deskripsi | Genre | Episode | Pemutar |",
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
     ok = lambda v: "✅" if v else "❌"
     other = []
     for name, status, d in rows:
         if d is None:
             other.append(f"- **{name}**: {status}")
             continue
-        lines.append(f"| {name} | ✅ | {ok(d['TITLE'])} | {ok(d['SEARCH'])} | {ok(d['PAGE_STYLE'] != 'none')} | "
+        lines.append(f"| {name} | {d.get('_source', 'situs')} | ✅ | {ok(d['TITLE'])} | {ok(d['SEARCH'])} | {ok(d['PAGE_STYLE'] != 'none')} | "
                      f"{len(d['CATEGORIES'])} | {ok(d['DESC'] or d['USE_OG_DESC'])} | {ok(d['GENRE'])} | "
                      f"{ok(d['EPISODE'])} | {ok(d.get('_player_found'))} |")
     if other:

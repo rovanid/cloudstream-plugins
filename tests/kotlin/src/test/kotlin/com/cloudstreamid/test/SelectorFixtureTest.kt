@@ -22,24 +22,23 @@ class SelectorFixtureTest {
         val player: String,
     )
 
-    // Provider ditemukan otomatis dari folder *Provider yang punya Selectors.kt (sama dengan build.gradle.kts).
-    // `object Sel` dibaca lewat refleksi supaya tidak ada referensi paket yang di-hardcode.
-    private fun readSel(provider: String, field: String): String {
-        val cls = Class.forName("com.cloudstreamid.${provider.lowercase()}.Sel")
-        return cls.getDeclaredField(field).also { it.isAccessible = true }.get(null) as String
-    }
-
-    private val sites: List<Site> = (File("../..").listFiles() ?: emptyArray())
-        .filter { it.isDirectory && it.name.endsWith("Provider") }
-        .filter { File(it, "src/main/kotlin/com/cloudstreamid/${it.name.lowercase()}/Selectors.kt").exists() }
-        .sortedBy { it.name }
-        .map { d ->
-            Site(
-                d.name,
-                readSel(d.name, "ITEM"), readSel(d.name, "TITLE"),
-                readSel(d.name, "EPISODE"), readSel(d.name, "PLAYER"),
-            )
-        }
+    private val sites = listOf(
+        Site(
+            "AnimeSailProvider",
+            com.cloudstreamid.animesailprovider.Sel.ITEM, com.cloudstreamid.animesailprovider.Sel.TITLE,
+            com.cloudstreamid.animesailprovider.Sel.EPISODE, com.cloudstreamid.animesailprovider.Sel.PLAYER
+        ),
+        Site(
+            "KuronimeProvider",
+            com.cloudstreamid.kuronimeprovider.Sel.ITEM, com.cloudstreamid.kuronimeprovider.Sel.TITLE,
+            com.cloudstreamid.kuronimeprovider.Sel.EPISODE, com.cloudstreamid.kuronimeprovider.Sel.PLAYER
+        ),
+        Site(
+            "LayarKaca21Provider",
+            com.cloudstreamid.layarkaca21provider.Sel.ITEM, com.cloudstreamid.layarkaca21provider.Sel.TITLE,
+            com.cloudstreamid.layarkaca21provider.Sel.EPISODE, com.cloudstreamid.layarkaca21provider.Sel.PLAYER
+        ),
+    )
 
     private fun fixture(site: String, kind: String): Document? {
         val f = File("fixtures/$site/$kind.html")
