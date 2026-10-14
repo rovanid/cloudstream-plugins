@@ -3,6 +3,6 @@
     "description": "Repo plugin Cloudstream, dibuild otomatis lewat GitHub Actions",
     "manifestVersion": 1,
     "pluginLists": [
-        "https://raw.githubusercontent.com/USER/REPO/builds/plugins.json"
+        "https://raw.githubusercontent.com/rovanid/cloudstream-plugins/builds/plugins.json"
     ]
 }

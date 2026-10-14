@@ -7,7 +7,7 @@ import java.net.URLEncoder
 
 class SflixProvider : MainAPI() {
     // JANGAN ubah format baris mainUrl ini, dipakai apply_domains.py
-    override var mainUrl = "https://sflix.example"
+    override var mainUrl = "https://ssflix.pro"
     override var name = "Sflix"
     override var lang = "id"
     override val hasMainPage = true
