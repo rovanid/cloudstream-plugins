@@ -2,8 +2,8 @@
 # dan diterapkan ke source Kotlin oleh apply_domains.py.
 # Format:  NamaFolder: https://domain
 # GANTI dengan domain yang sedang aktif sebelum push pertama.
-AnimeSailProvider: https://animesail.example
-KuramanimeProvider: https://kuramanime.example
-OtakudesuProvider: https://otakudesu.example
-LayarKaca21Provider: https://layarkaca21.example
-SflixProvider: https://sflix.example
+AnimeSailProvider: animesail | https://anisail.com/
+KuramanimeProvider: kuramanime | https://v20.kuramanime.ing/
+OtakudesuProvider: otakudesu | https://otakudesu.blog/
+LayarKaca21Provider: layarkaca21 | https://tv12.lk21official.cc/
+SflixProvider: sflix | https://ssflix.pro/
