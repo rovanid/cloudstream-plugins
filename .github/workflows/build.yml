@@ -11,7 +11,7 @@ on:
       - "*.md"
   workflow_dispatch:   # bisa dijalankan manual dari tab Actions
   schedule:
-    - cron: "0 */6 * * *"   # cek domain baru + build tiap 6 jam
+    - cron: "0 */6 * * *"   # build + deteksi selector berkala (domain baru diusulkan lewat domain-watch.yml)
 
 permissions:
   contents: write
@@ -44,10 +44,11 @@ jobs:
           ref: builds
           path: builds
 
-      - name: Deteksi domain baru otomatis
+      - name: Validasi registry dan jalankan tes
         run: |
           cd src
-          python3 .github/scripts/check_domains.py
+          python3 .github/scripts/registry.py
+          python3 -m unittest discover -s tests -v
 
       - name: Terapkan domains.yml
         run: |

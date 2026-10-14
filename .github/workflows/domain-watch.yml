@@ -1,0 +1,66 @@
+name: Pantau domain
+
+# Memeriksa domain tiap plugin. TIDAK mengubah main: bila ada domain baru yang lolos verifikasi,
+# workflow membuka/memperbarui satu Pull Request (branch auto/domain-update) yang harus di-merge manual.
+# Prasyarat: Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests".
+
+concurrency:
+  group: domain-watch
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 */6 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Periksa domain
+        run: |
+          python3 .github/scripts/check_domains.py --apply \
+            --report "$RUNNER_TEMP/domain_report.json" --summary "$RUNNER_TEMP/domain_summary.md"
+          { echo "## Hasil pantau domain"; echo; cat "$RUNNER_TEMP/domain_summary.md"; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Gerbang - registry dan tes harus lolos pada usulan
+        run: |
+          python3 .github/scripts/registry.py
+          python3 -m unittest discover -s tests
+
+      - name: Buka atau perbarui Pull Request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH=auto/domain-update
+          if [ -z "$(git status --porcelain domains.yml)" ]; then
+            echo "Tidak ada usulan domain."
+            # usulan lama yang sudah tidak relevan: tutup PR otomatis yang masih terbuka
+            N=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+            if [ -n "$N" ]; then gh pr close "$N" --comment "Usulan sudah tidak berlaku pada pemeriksaan terakhir." --delete-branch; fi
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add domains.yml
+          git commit -m "chore(domain): usulan domain baru (perlu review)"
+          git push --force origin "$BRANCH"
+          {
+            echo "Usulan otomatis dari **domain-watch**. Origin baru sudah diverifikasi langsung (https, HTTP 200, kata kunci ada, host unik); tes registry lolos."
+            echo; echo "**Review sebelum merge:** buka domain baru di browser dan pastikan itu situs yang benar. Setelah merge, build.yml menaikkan versi plugin."
+            echo; cat "$RUNNER_TEMP/domain_summary.md"
+          } > "$RUNNER_TEMP/pr_body.md"
+          N=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$N" ]; then
+            gh pr edit "$N" --body-file "$RUNNER_TEMP/pr_body.md"
+          else
+            gh pr create --head "$BRANCH" --base "${GITHUB_REF_NAME}" \
+              --title "Usulan domain baru (otomatis)" --body-file "$RUNNER_TEMP/pr_body.md"
+          fi

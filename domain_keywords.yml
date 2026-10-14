@@ -1,0 +1,7 @@
+# Kata kunci per plugin untuk memastikan sebuah domain benar-benar situs yang sama.
+# Format:  NamaFolderProvider: kata1, kata2     (cocok jika SALAH SATU ada di halaman, tanpa huruf besar/kecil)
+# Jika plugin tidak ditulis di sini, dipakai: nama folder tanpa "Provider" + label host saat ini.
+# Kata kunci sengaja spesifik: kata umum (mis. "anime") membuat domain parkir ikut lolos.
+AnimeSailProvider: animesail, anisail
+KuronimeProvider: kuronime
+LayarKaca21Provider: layarkaca21, lk21

@@ -1,7 +1,7 @@
 # Plugin ID untuk Cloudstream
 
 Repo plugin Cloudstream yang dibuild otomatis (`.cs3` + `plugins.json`) oleh GitHub Actions,
-lengkap dengan deteksi domain baru tiap 6 jam.
+lengkap dengan pemantauan domain tiap 6 jam (usulan domain baru masuk lewat Pull Request, bukan otomatis ke main).
 
 ## Cara pakai (sekali setup)
 
@@ -15,7 +15,7 @@ lengkap dengan deteksi domain baru tiap 6 jam.
 
 ## Kelola plugin: cukup edit `domains.yml`
 
-- **Update domain**: ganti URL di barisnya. `mainUrl` dan `version` plugin naik otomatis.
+- **Update domain**: ganti URL di barisnya (atau merge PR dari domain-watch). `mainUrl` dan `version` plugin naik otomatis.
 - **Hapus plugin**: hapus barisnya (atau beri `#` di depan). Folder plugin ikut terhapus saat workflow jalan.
   Pengaman: kalau `domains.yml` kosong/rusak, tidak ada yang dihapus.
 - **Tambah plugin**: tambah baris baru (lihat bagian "Tambah plugin baru").
@@ -49,11 +49,14 @@ Catatan: uji ini tidak menjalankan plugin sungguhan, hanya meniru alurnya dari C
 
 ## Alur otomatis
 
-`check_domains.py` cek domain & redirect → `domains.yml` diperbarui → `sync_plugins.py` membuat/menghapus
-folder plugin → `apply_domains.py`
-mengganti `mainUrl` di Kotlin dan menaikkan `version` → `generate_json.py repo` menulis
-`repo.json` → Gradle build → `generate_json.py plugins` melengkapi dan **memvalidasi**
-`plugins.json` → publish ke branch `builds`.
+**Build (`build.yml`)**: `registry.py` + tes → `sync_plugins.py` → `apply_domains.py` → `generate_json.py repo`
+→ `detect_selectors.py` → commit → Gradle build → `generate_json.py plugins` (validasi) → publish ke branch `builds`.
+
+**Pantau domain (`domain-watch.yml`, tiap 6 jam)**: `check_domains.py` memeriksa tiap domain (retry, kata kunci per plugin
+di `domain_keywords.yml`). Jika situs pindah ke origin baru, origin itu diverifikasi langsung (https, HTTP 200, kata kunci ada,
+host unik), tes dijalankan, lalu workflow membuka/memperbarui satu PR `auto/domain-update`. **Anda yang me-merge.**
+Domain mati/diblokir/parkir hanya dilaporkan di Actions summary; `domains.yml` tidak diubah.
+Prasyarat: Settings → Actions → General → centang "Allow GitHub Actions to create and approve pull requests".
 
 ## Pembuat JSON (`generate_json.py`)
 
