@@ -63,6 +63,37 @@ abstract class AdaptiveProvider : MainAPI() {
         return null
     }
 
+    /**
+     * MODE DEBUG: simpan HTML halaman ke penyimpanan supaya bisa dikirim untuk menyetel selector.
+     * Satu file per jenis (ditimpa), jadi tidak menumpuk. Folder dicoba berurutan:
+     * Cloudstream3/dump, folder data aplikasi, lalu cache. Hasilnya dicatat di logcat (tag AdaptiveProvider).
+     */
+    private fun dump(kind: String, url: String, html: String) {
+        try {
+            val fileName = (name + "-" + kind).replace(Regex("[^A-Za-z0-9._-]"), "_") + ".html"
+            val body = "<!-- url: " + url + " -->\n" + html.take(2_000_000)
+            val ctx = AcraApplication.context
+            val dirs = listOfNotNull(
+                java.io.File(android.os.Environment.getExternalStorageDirectory(), "Cloudstream3/dump"),
+                ctx?.getExternalFilesDir(null)?.let { java.io.File(it, "dump") },
+                ctx?.cacheDir?.let { java.io.File(it, "dump") }
+            )
+            for (d in dirs) {
+                try {
+                    d.mkdirs()
+                    val f = java.io.File(d, fileName)
+                    f.writeText(body)
+                    Log.d("AdaptiveProvider", "dump OK " + f.absolutePath + " (" + body.length + "B)")
+                    return
+                } catch (e: Exception) {
+                    Log.d("AdaptiveProvider", "dump gagal di " + d.path + ": " + e.javaClass.simpleName)
+                }
+            }
+        } catch (e: Exception) {
+            Log.d("AdaptiveProvider", "dump error: " + e.javaClass.simpleName)
+        }
+    }
+
     private fun safeSelect(root: Element, sel: String): List<Element> {
         if (sel.isBlank()) return emptyList()
         return try {
@@ -248,6 +279,7 @@ abstract class AdaptiveProvider : MainAPI() {
         val doc = fetch(pageUrl(request.data, page))
         val home = findCards(doc, 2).mapNotNull { toSearchResult(it) }.distinctBy { it.url }
         if (home.isEmpty() && page == 1) {
+            dump("home", pageUrl(request.data, page), doc.outerHtml())
             throw ErrorLoadingException(
                 "Daftar kosong. Situs mungkin memblokir akses, domain berubah, atau tampilannya berubah."
             )
@@ -479,6 +511,7 @@ abstract class AdaptiveProvider : MainAPI() {
             episodes = episodesOf(doc, pageUrl)
         }
 
+        if (episodes.isEmpty()) dump("load-noeps", pageUrl, doc.outerHtml())
         val rawTitle = titleOf(doc) ?: throw ErrorLoadingException("Judul tidak ditemukan")
         val title = tidyTitle(rawTitle, episodes.isNotEmpty() && pageUrl != url)
         val poster = posterOfPage(doc)
@@ -727,6 +760,7 @@ abstract class AdaptiveProvider : MainAPI() {
             return true
         }
 
+        dump("embed-" + hostLabel(embed).removePrefix(name).trim(), embed, html)
         val nested = LinkedHashSet<String>()
         for (e in parsed.select("iframe[src], iframe[data-src]")) {
             addEmbedUrl(e.attr("src").ifBlank { e.attr("data-src") }, embed, nested)
@@ -857,6 +891,7 @@ abstract class AdaptiveProvider : MainAPI() {
         }
 
         if (!ok) {
+            dump("links", data, doc.outerHtml())
             val msg = "Tautan tidak ditemukan [$name] " + log.joinToString(" | ")
             Log.e("AdaptiveProvider", msg)
             throw ErrorLoadingException(msg.take(600))

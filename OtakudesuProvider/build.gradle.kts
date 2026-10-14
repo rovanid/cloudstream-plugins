@@ -1,5 +1,5 @@
 // Naikkan otomatis oleh apply_domains.py saat domain berubah
-version = 5
+version = 6
 
 cloudstream {
     description = "Otakudesu - dibuild otomatis"
