@@ -14,3 +14,4 @@
 # check_domains.py juga memperbarui URL di sini sendiri kalau situs redirect ke domain baru.
 # ============================================================
 AnimeSailProvider: https://anisail.com
+SflixProvider: https://sflix.blue
