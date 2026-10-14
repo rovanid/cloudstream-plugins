@@ -31,6 +31,7 @@ jobs:
 
       - name: Gerbang - registry dan tes harus lolos pada usulan
         run: |
+          pip install beautifulsoup4
           python3 .github/scripts/registry.py
           python3 -m unittest discover -s tests
 
