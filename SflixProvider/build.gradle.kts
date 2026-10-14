@@ -1,5 +1,5 @@
 // Naikkan otomatis oleh apply_domains.py saat domain berubah
-version = 7
+version = 8
 
 cloudstream {
     description = "Sflix - dibuild otomatis"

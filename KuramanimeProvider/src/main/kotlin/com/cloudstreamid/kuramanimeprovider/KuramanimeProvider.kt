@@ -147,10 +147,11 @@ class KuramanimeProvider : AdaptiveProvider() {
                 val q = it.attr("size").toIntOrNull() ?: Qualities.Unknown.value
                 direct[it.attr("src")] = q
             }
-            doc.selectFirst("video#player")?.let { v ->
-                v.attr("src").takeIf { it.isNotBlank() }?.let { direct.putIfAbsent(it, qualityFromUrl(it)) }
-                v.attr("data-hls-src").takeIf { it.isNotBlank() }?.let { direct.putIfAbsent(it, Qualities.Unknown.value) }
-            }
+            val vid = doc.selectFirst("video#player")
+            val vSrc = vid?.attr("src").orEmpty()
+            if (vSrc.isNotBlank() && !direct.containsKey(vSrc)) direct[vSrc] = qualityFromUrl(vSrc)
+            val vHls = vid?.attr("data-hls-src").orEmpty()
+            if (vHls.isNotBlank() && !direct.containsKey(vHls)) direct[vHls] = Qualities.Unknown.value
             for ((src, q) in direct) {
                 if (!seen.add(src)) continue
                 callback.invoke(

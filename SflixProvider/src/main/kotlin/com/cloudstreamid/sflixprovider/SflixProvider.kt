@@ -6,9 +6,9 @@ import com.lagradost.cloudstream3.*
 
 class SflixProvider : AdaptiveProvider() {
     // JANGAN ubah format baris mainUrl ini, dipakai apply_domains.py
-    override var mainUrl = "https://ssflix.pro"
+    override var mainUrl = "https://sflix.blue"
     override var name = "Sflix"
-    override var lang = "id"
+    override var lang = "en"
     override val supportedTypes = setOf(TvType.Movie, TvType.TvSeries)
 
     // Nilai Sel.* diisi otomatis oleh detect_selectors.py (kalau situs bisa dijangkau dari CI).
@@ -29,15 +29,23 @@ class SflixProvider : AdaptiveProvider() {
         useOgDesc = Sel.USE_OG_DESC,
         player = Sel.PLAYER,
         playerAttrs = Sel.PLAYER_ATTRS,
-        // Beranda "/" hanya halaman SEO; daftar film ada di halaman-halaman ini (dari menu situs).
-        // Format paginasi belum diketahui: "?page={page}" adalah tebakan.
+        // Kategori ASLI sflix.blue (dari menu situs / tab di /movies/ dan beranda).
+        // Format halaman berikutnya belum terverifikasi: dicoba "/page/N/" lalu "?page=N" (lihat catatan).
         categories = listOf(
-            "/latest-movies?page={page}" to "Film Terbaru",
-            "/popular-movies?page={page}" to "Film Populer",
-            "/tv-series?page={page}" to "Serial TV",
-            "/top-imdb?page={page}" to "Top IMDb",
-            "/anime?page={page}" to "Anime"
+            "/latest-movie/" to "Film Terbaru",
+            "/popular-movie/" to "Film Populer",
+            "/top-rated-movie/" to "Film Rating Tertinggi",
+            "/upcoming-movie/" to "Film Segera Tayang",
+            "/airing-today-tv/" to "Serial Tayang Hari Ini",
+            "/popular-tv/" to "Serial Populer",
+            "/on-the-air-tv/" to "Serial Sedang Tayang",
+            "/top-rated-tv/" to "Serial Rating Tertinggi"
         ),
-        // Situs ini memuat daftar & pemutar lewat JavaScript; hasil bisa kosong di beberapa domain.
+        // Struktur kartu (dari HTML /movies/): div.ml-item > a.ml-mask[title][href] > img.mli-thumb[data-original]
+        extraItems = listOf("div.ml-item"),
+        extraTitle = listOf(".mli-info h2", "a.ml-mask[title]"),
+        extraPoster = listOf("img.mli-thumb", "img.lazy"),
+        // Detail film: /movie/<slug>-<id>/   Detail serial: /tv/<id>/<slug>/
+        seriesLinkHints = listOf("/tv/"),
     )
 }
