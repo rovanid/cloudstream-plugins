@@ -1,0 +1,48 @@
+name: Uji pemutaran
+
+# Menguji berkala apakah tiap plugin masih menghasilkan URL video yang hidup.
+# URL situs yang berganti / tidak terjangkau DIKECUALIKAN (urusan domains.yml), bukan kegagalan.
+
+concurrency:
+  group: health
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 */12 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install beautifulsoup4
+
+      - name: Uji pemutaran
+        id: test
+        env:
+          # ubah ke "1" bila ingin status plugin (Down/Ok) diubah otomatis setelah 2x FAIL berturut-turut
+          AUTO_STATUS: "0"
+          FAIL_THRESHOLD: "2"
+        run: python3 .github/scripts/check_playback.py
+
+      - name: Simpan laporan
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore: laporan uji pemutaran [skip ci]"
+            git pull --rebase origin "${GITHUB_REF_NAME}" || true
+            git push || true
+          fi

@@ -34,6 +34,19 @@ bawaan CloudStream → kalau host tidak dikenal: buka halaman embed, cari `.m3u8
 di-pack) dan ikuti iframe bersarang → tombol "Nonton" yang membuka halaman pemutar lain → URL embed di dalam script.
 Tiap langkah dibungkus try/catch, jadi satu host rusak tidak menggagalkan yang lain.
 
+Jika semuanya gagal, mesin memuat halaman di WebView tersembunyi dan menangkap request `.m3u8/.mp4`
+(untuk pemutar yang dirender JavaScript), lalu melempar error berisi jejak diagnosis dan menulisnya ke
+logcat dengan tag `AdaptiveProvider`.
+
+## Uji pemutaran berkala (`health.yml`)
+
+Tiap 12 jam `check_playback.py` menelusuri kategori → item → episode → embed → URL video, lalu memverifikasi
+playlist `.m3u8` (termasuk segmen pertama) atau `.mp4`. Hasil di `playback_report.md`; workflow merah bila
+ada plugin ❌ FAIL. URL situs yang berganti/tidak terjangkau dikecualikan (🔁), begitu juga situs yang
+memblokir bot atau memuat daftar lewat JavaScript (⏸️). Kategori yang tidak memuat daftar ikut dilaporkan.
+Isi `AUTO_STATUS: "1"` di `health.yml` kalau status Down/Ok mau diubah otomatis setelah 2x FAIL berturut-turut.
+Catatan: uji ini tidak menjalankan plugin sungguhan, hanya meniru alurnya dari CI.
+
 ## Alur otomatis
 
 `check_domains.py` cek domain & redirect → `domains.yml` diperbarui → `sync_plugins.py` membuat/menghapus

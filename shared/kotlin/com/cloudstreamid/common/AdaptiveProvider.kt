@@ -1,7 +1,9 @@
 package com.cloudstreamid.common
 
+import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.network.CloudflareKiller
+import com.lagradost.cloudstream3.network.WebViewResolver
 import com.lagradost.cloudstream3.utils.*
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -643,25 +645,38 @@ abstract class AdaptiveProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit,
         seen: MutableSet<String>,
-        visited: MutableSet<String>
+        visited: MutableSet<String>,
+        log: MutableList<String>
     ): Boolean {
         if (!visited.add(embed)) return false
         val label = hostLabel(embed)
-        if (isDirect(embed)) return emitDirect(embed, referer, label, null, callback, seen)
+        val short = hostLabel(embed).removePrefix(name).trim()
+        val tag = "d$depth $short"
+        if (isDirect(embed)) {
+            log.add("$tag: langsung")
+            return emitDirect(embed, referer, label, null, callback, seen)
+        }
 
         val viaExtractor = try {
             loadExtractor(embed, referer, subtitleCallback, callback)
         } catch (e: Exception) {
+            log.add("$tag: extractor error ${e.javaClass.simpleName}")
             false
         }
-        if (viaExtractor) return true
+        if (viaExtractor) {
+            log.add("$tag: extractor bawaan OK")
+            return true
+        }
         if (depth >= MAX_EMBED_DEPTH) return false
 
-        val html = try {
-            app.get(embed, referer = referer).text
+        val resp = try {
+            app.get(embed, referer = referer)
         } catch (e: Exception) {
+            log.add("$tag: gagal dibuka ${e.javaClass.simpleName}")
             return false
         }
+        val html = resp.text
+        log.add("$tag: extractor tidak kenal, halaman HTTP ${resp.code} ${html.length}B")
 
         val body = html.replace("\\/", "/")
         val unpacked = if (body.contains("eval(function(p,a,c,k,e,d)")) {
@@ -681,16 +696,44 @@ abstract class AdaptiveProvider : MainAPI() {
 
         val parsed = Jsoup.parse(html)
         ok = pageSources(parsed, embed, label, callback, seen) || ok
-        if (ok) return true
+        if (ok) {
+            log.add("$tag: media ditemukan di halaman embed")
+            return true
+        }
 
         val nested = LinkedHashSet<String>()
         for (e in parsed.select("iframe[src], iframe[data-src]")) {
             addEmbedUrl(e.attr("src").ifBlank { e.attr("data-src") }, embed, nested)
         }
+        log.add("$tag: tanpa media langsung, iframe bersarang ${nested.size}")
         for (n in nested) {
-            ok = resolveEmbed(n, embed, depth + 1, subtitleCallback, callback, seen, visited) || ok
+            ok = resolveEmbed(n, embed, depth + 1, subtitleCallback, callback, seen, visited, log) || ok
         }
         return ok
+    }
+
+    /**
+     * Pemutar yang dirender JavaScript: muat halaman di WebView tersembunyi dan tangkap
+     * request .m3u8/.mp4 yang dikirim pemutarnya. Hanya dipakai kalau semua cara lain gagal.
+     */
+    private suspend fun sniff(
+        url: String,
+        referer: String,
+        label: String,
+        callback: (ExtractorLink) -> Unit,
+        seen: MutableSet<String>,
+        log: MutableList<String>
+    ): Boolean {
+        val short = hostLabel(url).removePrefix(name).trim()
+        val found = try {
+            app.get(url, referer = referer, interceptor = WebViewResolver(SNIFF_RE)).url
+        } catch (e: Exception) {
+            log.add("webview $short: error ${e.javaClass.simpleName}")
+            return false
+        }
+        val good = SNIFF_RE.containsMatchIn(found) && SKIP_HOSTS.none { found.contains(it, true) }
+        log.add("webview $short: " + (if (good) "dapat media" else "tidak ada media"))
+        return good && emitDirect(found, url, label, null, callback, seen)
     }
 
     /** Terakhir: URL bergaya embed yang tertulis di dalam script halaman. */
@@ -724,10 +767,17 @@ abstract class AdaptiveProvider : MainAPI() {
         val doc = fetch(data)
         val seen = HashSet<String>()      // URL yang sudah dikirim ke aplikasi
         val visited = HashSet<String>()   // embed yang sudah dibuka
+        val log = ArrayList<String>()     // jejak diagnosis (logcat + pesan error)
         var ok = pageSources(doc, data, name, callback, seen)
 
-        for (u in collectEmbeds(doc, data)) {
-            ok = resolveEmbed(u, data, 0, subtitleCallback, callback, seen, visited) || ok
+        val embeds = collectEmbeds(doc, data)
+        val nIframe = doc.select("iframe").size
+        val nOption = doc.select("option").size
+        val nVideo = doc.select("video").size
+        val pageTitle = doc.title().take(30)
+        log.add("halaman ${doc.html().length}B title=$pageTitle iframe=$nIframe option=$nOption video=$nVideo embed=${embeds.size}")
+        for (u in embeds) {
+            ok = resolveEmbed(u, data, 0, subtitleCallback, callback, seen, visited, log) || ok
         }
 
         // pemutar ada di halaman lain (tombol "Nonton")
@@ -738,9 +788,12 @@ abstract class AdaptiveProvider : MainAPI() {
                 } catch (e: Exception) {
                     continue
                 }
+                val es = collectEmbeds(d, w)
+                val wShort = w.substringAfter("://").take(40)
+                log.add("halaman nonton $wShort embed=${es.size}")
                 ok = pageSources(d, w, name, callback, seen) || ok
-                for (u in collectEmbeds(d, w)) {
-                    ok = resolveEmbed(u, w, 0, subtitleCallback, callback, seen, visited) || ok
+                for (u in es) {
+                    ok = resolveEmbed(u, w, 0, subtitleCallback, callback, seen, visited, log) || ok
                 }
                 if (ok) break
             }
@@ -756,11 +809,28 @@ abstract class AdaptiveProvider : MainAPI() {
             }
         }
         if (!ok) {
-            for (u in scriptEmbedCandidates(doc, data).take(8)) {
-                ok = resolveEmbed(u, data, 0, subtitleCallback, callback, seen, visited) || ok
+            val cands = scriptEmbedCandidates(doc, data).take(8)
+            log.add("kandidat embed dari script=${cands.size}")
+            for (u in cands) {
+                ok = resolveEmbed(u, data, 0, subtitleCallback, callback, seen, visited, log) || ok
             }
         }
-        return ok
+
+        // terakhir: WebView (maksimal 3 percobaan: 2 embed pertama, lalu halaman episode)
+        if (!ok) {
+            for (u in embeds.take(2)) {
+                ok = sniff(u, data, hostLabel(u), callback, seen, log) || ok
+                if (ok) break
+            }
+            if (!ok) ok = sniff(data, "$mainUrl/", name, callback, seen, log)
+        }
+
+        if (!ok) {
+            val msg = "Tautan tidak ditemukan [$name] " + log.joinToString(" | ")
+            Log.d("AdaptiveProvider", msg)
+            throw ErrorLoadingException(msg.take(600))
+        }
+        return true
     }
 
     companion object {
@@ -770,6 +840,7 @@ abstract class AdaptiveProvider : MainAPI() {
             "data-url", "data-src", "data-iframe", "data-embed", "data-em", "data-link", "data-player", "href"
         )
         private const val MAX_EMBED_DEPTH = 3
+        private val SNIFF_RE = Regex("""(?i)(\.m3u8|\.mp4|googlevideo\.com/videoplayback)""")
         private val MEDIA_RE = Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4)[^\s"'<>\\]*""")
         private val QUALITY_RE = Regex("(?<!\\d)(2160|1440|1080|720|480|360|240)(?!\\d)")
         private val JUNK_MEDIA = Regex("(?i)(doubleclick|/ads?/|adserver|banner|promo|sprite)")
