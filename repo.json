@@ -1,0 +1,8 @@
+{
+    "name": "Plugin ID",
+    "description": "Repo plugin Cloudstream, dibuild otomatis lewat GitHub Actions",
+    "manifestVersion": 1,
+    "pluginLists": [
+        "https://raw.githubusercontent.com/rovanid/cloudstream-plugins/builds/plugins.json"
+    ]
+}

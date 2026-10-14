@@ -1,0 +1,9 @@
+# Domain aktif tiap provider. Diperbarui otomatis oleh check_domains.py
+# dan diterapkan ke source Kotlin oleh apply_domains.py.
+# Format:  NamaFolder: https://domain
+# (Format "kata_kunci | url" HANYA untuk candidates.yml, bukan di sini.)
+AnimeSailProvider: https://anisail.com
+KuramanimeProvider: https://v20.kuramanime.ing
+OtakudesuProvider: https://otakudesu.blog
+LayarKaca21Provider: https://tv12.lk21official.cc
+SflixProvider: https://ssflix.pro

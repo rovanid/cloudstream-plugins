@@ -1,0 +1,115 @@
+name: Build
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: [master, main]
+    paths-ignore:
+      - "*.md"
+  workflow_dispatch:   # bisa dijalankan manual dari tab Actions
+  schedule:
+    - cron: "0 */6 * * *"   # cek domain baru + build tiap 6 jam
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: Pastikan branch builds ada
+        run: |
+          cd src
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git ls-remote --exit-code --heads origin builds >/dev/null 2>&1; then
+            git checkout --orphan builds
+            git rm -rf . >/dev/null
+            git commit --allow-empty -m "init builds"
+            git push origin builds
+            git checkout -
+          fi
+
+      - name: Checkout builds
+        uses: actions/checkout@v4
+        with:
+          ref: builds
+          path: builds
+
+      - name: Deteksi domain baru otomatis
+        run: |
+          cd src
+          python3 .github/scripts/check_domains.py
+
+      - name: Terapkan domains.yml
+        run: |
+          cd src
+          python3 .github/scripts/new_plugins.py
+          python3 .github/scripts/apply_domains.py
+          # repo.json otomatis sesuai nama repo GitHub ini (format manifest CloudStream)
+          python3 .github/scripts/generate_json.py repo
+
+      - name: Deteksi selector otomatis
+        env:
+          # jalankan manual dari tab Actions = paksa deteksi ulang semua plugin
+          FORCE_DETECT: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
+        run: |
+          cd src
+          pip install beautifulsoup4
+          python3 .github/scripts/detect_selectors.py
+
+      - name: Commit perubahan otomatis
+        run: |
+          cd src
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore: domain, plugin baru, selector, dan version otomatis [skip ci]"
+            git push
+          fi
+
+      - name: Hapus build lama
+        run: rm -f builds/*.cs3
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Terima lisensi Android SDK
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Build plugin
+        run: |
+          cd src
+          gradle make makePluginsJson --no-daemon
+          find . -path "*/build/*.cs3" -exec cp {} ../builds/ \;
+
+      - name: Buat dan validasi plugins.json
+        run: |
+          # melengkapi JSON Gradle (iconUrl, fileSize, versi) dan memvalidasinya terhadap .cs3;
+          # gagal (exit 1) kalau ada entri rusak sehingga JSON salah tidak dipublikasikan
+          python3 src/.github/scripts/generate_json.py plugins \
+            --builds-dir builds --gradle-json src/build/plugins.json
+
+      - name: Publish ke branch builds
+        run: |
+          cd builds
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit --amend --no-edit -m "Build $GITHUB_SHA" || true
+          git push --force
