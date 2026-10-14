@@ -64,6 +64,19 @@ Domain: `domain-watch.yml` → `check_domains.py --apply` → registry+tes → P
 - Diperiksa: `qualityOf()` hanya membaca petunjuk (URL/label), selain itu `Qualities.Unknown`; tidak menebak. `emitDirect` mengembalikan true begitu URL dikirim ke app, bukan bukti video bisa diputar: ini batas yang diketahui, bukti sebenarnya hanya dari uji di aplikasi.
 - Tes Python tetap 46 lulus. Tes parser fixture (Kotlin) BELUM dibuat: sandbox tidak punya kotlinc/Gradle/jaringan, jadi tidak bisa dikompilasi di sini. Opsi: jalankan di CI (job Gradle `test`) setelah fixture HTML nyata tersedia.
 
+## 7d. Tes parser Kotlin (dibuat 14 Okt 2026, BELUM pernah dijalankan)
+- Proyek Gradle terpisah `tests/kotlin` (JVM murni, Jsoup + JUnit 5, tanpa Android/Cloudstream; tidak menyentuh build plugin). Memakai `Selectors.kt` tiap plugin + `SiteConfig.kt` apa adanya; `AdaptiveProvider.kt` TIDAK ikut karena butuh class Cloudstream.
+- `SelectorFixtureTest.kt` menguji `Sel.ITEM/TITLE/EPISODE/PLAYER` terhadap HTML asli di `tests/kotlin/fixtures/<Provider>/{list,detail,episode}.html`. Fixture belum ada -> tes dilewati (bukan gagal). Fixture harus disimpan pengguna dari browser (situs memblokir bot).
+- Workflow `kotlin-test.yml`: manual (workflow_dispatch) atau push ke branch `test/**`; tidak jalan di main, tidak menyentuh `builds`. Ringkasan hasil ditulis ke Job summary lewat `.github/scripts/summarize_junit.py` (diuji `tests/test_summarize_junit.py`, 48 tes Python lulus).
+- RISIKO: build.gradle.kts tes dan kode Kotlin tes tidak bisa dikompilasi di sandbox; kemungkinan perlu perbaikan setelah run pertama. Menguji logika `AdaptiveProvider` sendiri butuh refactor: ekstrak fungsi parsing murni (Jsoup saja) ke file tanpa dependensi Cloudstream, lalu sertakan di proyek tes. Belum dikerjakan.
+
+## 7e. Patch AnimeSail + tes MHTML (14 Okt 2026, malam)
+- Laporan tes Kotlin: 9 tes, 0 gagal, 8 DILEWATI (hanya `AnimeSail episode.html` benar-benar jalan). "Sukses 100%" menyesatkan. AnimeSail list/detail dilewati karena `Sel.ITEM/TITLE/EPISODE` kosong (auto-detect score 0); Kuronime/LayarKaca21 dilewati karena fixture belum ada.
+- Fixture AnimeSail berformat MHTML ("Saved by Blink"). `SelectorFixtureTest.kt` kini punya `extractHtml()` yang mengambil bagian text/html. BELUM dikompilasi/dijalankan di Gradle (replika Python: list 24 `article.bs`, detail 1 `ul.daftar li a`, episode 12 `option[data-em]`).
+- `AnimeSailProvider/.../Selectors.kt` DIKUNCI manual (tanpa `@auto-detect`): ITEM `article.bs`, TITLE `.tt h2`, EPISODE `ul.daftar li a`, PLAYER `select.mirror option[data-em]`. Runtime sebelumnya sudah memakai selector sama lewat `extra*` di AnimeSailProvider.kt; yang terdampak hanya tes/auto-detect. Versi AnimeSail akan naik 1 di build berikutnya.
+- Fixture detail.html AnimeSail hanya punya 1 episode (tes lemah). Fixture Kuronime/LayarKaca21 belum ada (simpan "hanya HTML").
+- Berikutnya: jalankan `kotlin-test.yml` di branch `test/**`, cek hasilnya (harus ada tes AnimeSail yang lulus, bukan dilewati).
+
 ## 8. Masalah terbuka
 Lihat `docs/AUDIT.md` temuan 6–11 (3 dan 4 selesai di kode, belum diuji di Actions). Khusus: `plugin_hashes.json` baru terisi baseline; di build nyata pertama, `detect_selectors.py` bisa mengubah Selectors.kt sehingga versi naik (itu benar). PR buatan `GITHUB_TOKEN` tidak memicu `pr-check.yml` (gerbang tes sudah ada di dalam `domain-watch.yml`); `health.yml` masih `|| true` pada push.
 
