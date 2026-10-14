@@ -1,5 +1,5 @@
 // Naikkan otomatis oleh apply_domains.py saat domain berubah
-version = 8
+version = 7
 
 cloudstream {
     description = "AnimeSail - dibuild otomatis"
