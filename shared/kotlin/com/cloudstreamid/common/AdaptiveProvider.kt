@@ -68,11 +68,18 @@ abstract class AdaptiveProvider : MainAPI() {
      * Satu file per jenis (ditimpa), jadi tidak menumpuk. Folder dicoba berurutan:
      * Cloudstream3/dump, folder data aplikasi, lalu cache. Hasilnya dicatat di logcat (tag AdaptiveProvider).
      */
+    /** Context aplikasi lewat refleksi, supaya tidak bergantung pada nama class internal CloudStream. */
+    private fun appContext(): android.content.Context? = try {
+        Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null) as? android.content.Context
+    } catch (e: Exception) {
+        null
+    }
+
     private fun dump(kind: String, url: String, html: String) {
         try {
             val fileName = (name + "-" + kind).replace(Regex("[^A-Za-z0-9._-]"), "_") + ".html"
             val body = "<!-- url: " + url + " -->\n" + html.take(2_000_000)
-            val ctx = AcraApplication.context
+            val ctx = appContext()
             val dirs = listOfNotNull(
                 java.io.File(android.os.Environment.getExternalStorageDirectory(), "Cloudstream3/dump"),
                 ctx?.getExternalFilesDir(null)?.let { java.io.File(it, "dump") },
