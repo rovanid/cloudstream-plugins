@@ -4,9 +4,9 @@ Dibuat otomatis oleh `detect_selectors.py`. Tanda ❌ berarti perlu disetel manu
 
 | Plugin | Item | Judul | Cari | Halaman | Kategori | Deskripsi | Genre | Episode | Pemutar |
 |---|---|---|---|---|---|---|---|---|---|
+| KuronimeProvider | ✅ | ✅ | ❌ | ❌ | 0 | ✅ | ❌ | ✅ | ❌ |
 
 Tidak diproses / gagal:
 
 - **AnimeSailProvider**: dikunci manual
-- **KuronimeProvider**: belum waktunya (terakhir 2026-10-14)
 - **LayarKaca21Provider**: diblokir bot (Cloudflare?), tidak bisa dideteksi otomatis
