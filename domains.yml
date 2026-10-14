@@ -11,7 +11,7 @@
 # check_domains.py juga memperbarui URL di sini sendiri kalau situs redirect ke domain baru.
 # ============================================================
 AnimeSailProvider: https://anisail.com
-Kuronime : https://kuronime.sbs/
+Kuronime : https://kuronime.sbs
 #KuramanimeProvider: https://v20.kuramanime.ing
 #OtakudesuProvider: https://otakudesu.blog
 LayarKaca21Provider: https://tv12.lk21official.cc

@@ -8,7 +8,5 @@ Dibuat otomatis oleh `detect_selectors.py`. Tanda ❌ berarti perlu disetel manu
 Tidak diproses / gagal:
 
 - **AnimeSailProvider**: diblokir bot (Cloudflare?), tidak bisa dideteksi otomatis
-- **KuramanimeProvider**: diblokir bot (Cloudflare?), tidak bisa dideteksi otomatis
-- **OtakudesuProvider**: diblokir bot (Cloudflare?), tidak bisa dideteksi otomatis
 - **LayarKaca21Provider**: diblokir bot (Cloudflare?), tidak bisa dideteksi otomatis
-- **SflixProvider**: gagal: daftar item tidak ditemukan (kemungkinan dimuat lewat JavaScript)
+- **SflixProvider**: gagal: halaman utama tidak bisa dibuka
