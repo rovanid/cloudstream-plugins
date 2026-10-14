@@ -10,3 +10,4 @@ Selesai: izin PR diaktifkan dan `domain-watch.yml` dijalankan (hasil di `lanjut.
 7. Rapikan `health.yml` (hapus `|| true`, konflik push dengan `build.yml`).
 
 8. (Selesai sesi ini) `.gitignore` kini mengabaikan `__pycache__/` dan `*.pyc`; runner dipatok `ubuntu-24.04` (ubuntu-latest pindah ke Ubuntu 26 mulai 19 Okt 2026). Pengguna: jalankan `git rm -r --cached .github/scripts/__pycache__` bila folder itu masih ada di repo. Build #23, health #2, domain-watch #2 sukses di Actions.
+9. (Selesai) status AnimeSail/LayarKaca21 -> 3 (Beta). Berikutnya: ambil fixture HTML nyata (simpan halaman daftar/detail/episode tiap situs dari browser ke `tests/fixtures/`), lalu tes parser dijalankan di CI.

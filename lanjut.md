@@ -58,6 +58,12 @@ Domain: `domain-watch.yml` → `check_domains.py --apply` → registry+tes → P
 - `domain-watch.yml` #2 (manual) sukses: hasil sama seperti bagian 7, tanpa usulan; jalur PR masih belum teruji.
 - Temuan + perbaikan (belum diuji di Actions): `__pycache__` ikut ter-commit karena `git add -A` -> `.gitignore` ditambah `__pycache__/` dan `*.pyc` (folder lama perlu `git rm -r --cached .github/scripts/__pycache__`). `ubuntu-latest` pindah ke Ubuntu 26 mulai 19 Okt 2026 -> semua workflow dipatok `ubuntu-24.04`. Peringatan Node.js 20 deprecated pada actions v4/v5 belum ditangani.
 
+## 7c. Sesi lanjutan (14 Okt 2026, malam)
+- `build.yml` #25 sukses di runner Ubuntu 24.04.5 (pin `ubuntu-24.04` terbukti jalan) dalam 1m19s.
+- `status` AnimeSail dan LayarKaca21 diturunkan 1 -> 3 (Beta) karena pemutaran belum terverifikasi; Kuronime sudah 3. Ini mengubah folder plugin sehingga `bump_versions.py` akan menaikkan version keduanya di build berikut (benar).
+- Diperiksa: `qualityOf()` hanya membaca petunjuk (URL/label), selain itu `Qualities.Unknown`; tidak menebak. `emitDirect` mengembalikan true begitu URL dikirim ke app, bukan bukti video bisa diputar: ini batas yang diketahui, bukti sebenarnya hanya dari uji di aplikasi.
+- Tes Python tetap 46 lulus. Tes parser fixture (Kotlin) BELUM dibuat: sandbox tidak punya kotlinc/Gradle/jaringan, jadi tidak bisa dikompilasi di sini. Opsi: jalankan di CI (job Gradle `test`) setelah fixture HTML nyata tersedia.
+
 ## 8. Masalah terbuka
 Lihat `docs/AUDIT.md` temuan 6–11 (3 dan 4 selesai di kode, belum diuji di Actions). Khusus: `plugin_hashes.json` baru terisi baseline; di build nyata pertama, `detect_selectors.py` bisa mengubah Selectors.kt sehingga versi naik (itu benar). PR buatan `GITHUB_TOKEN` tidak memicu `pr-check.yml` (gerbang tes sudah ada di dalam `domain-watch.yml`); `health.yml` masih `|| true` pada push.
 

@@ -4,7 +4,7 @@ version = 7
 cloudstream {
     description = "LayarKaca21 - dibuild otomatis"
     authors = listOf("Plugin ID")
-    status = 1 // 0 Down, 1 Ok, 2 Slow, 3 Beta-only
+    status = 3 // Beta-only: pemutaran belum terverifikasi (BLOCKED dari CI). Naikkan ke 1 setelah dicoba di aplikasi
     tvTypes = listOf("Movie", "TvSeries")
     language = "id"
     requiresResources = false
