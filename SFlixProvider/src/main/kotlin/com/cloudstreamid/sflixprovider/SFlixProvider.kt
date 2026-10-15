@@ -30,16 +30,25 @@ class SFlixProvider : MainAPI() {
     private fun pageUrl(base: String, page: Int): String =
         if (page <= 1) base else base.trimEnd('/') + "/page/$page/"
 
+    // Helper bertipe eksplisit: jangan biarkan Kotlin menyimpulkan tipe Jsoup (anotasi jspecify tidak ada di classpath)
+    private fun first(root: Element, sel: String): Element? = root.selectFirst(sel)
+
+    private fun imgUrl(el: Element?, vararg attrs: String): String? {
+        if (el == null) return null
+        for (a in attrs) {
+            val v: String = el.attr(a).trim()
+            if (v.isNotBlank() && !v.startsWith("data:")) return v
+        }
+        return null
+    }
+
     // ------------------------------------------------------------------ daftar
     private fun toCard(el: Element): SearchResponse? {
-        val a = el.selectFirst(Sel.TITLE) ?: el.selectFirst(Sel.POSTER_LINK) ?: return null
+        val a = first(el, Sel.TITLE) ?: first(el, Sel.POSTER_LINK) ?: return null
         val href = fixUrlNull(a.attr("href").trim()) ?: return null
         if (!href.contains("/movie/") && !href.contains("/series/")) return null
         val title = a.attr("title").ifBlank { a.text() }.trim().ifBlank { return null }
-        val img = el.selectFirst(Sel.POSTER)
-        val poster = listOf("data-src", "data-lazy-src", "src")
-            .map { img?.attr(it)?.trim().orEmpty() }
-            .firstOrNull { it.isNotBlank() && !it.startsWith("data:") }
+        val poster = imgUrl(first(el, Sel.POSTER), "data-src", "data-lazy-src", "src")
             ?.replace("/w185/", "/w500/")
         return if (href.contains("/series/")) {
             newTvSeriesSearchResponse(title, href, TvType.TvSeries) { this.posterUrl = poster }
@@ -67,7 +76,7 @@ class SFlixProvider : MainAPI() {
 
     // ------------------------------------------------------------------ detail
     private fun rowOf(doc: Document, label: String): Element? =
-        doc.select(Sel.D_ROW).firstOrNull { it.selectFirst("strong")?.text()?.trim()?.startsWith(label, true) == true }
+        doc.select(Sel.D_ROW).firstOrNull { first(it, "strong")?.text()?.trim()?.startsWith(label, true) == true }
 
     private val epHref = Regex("""/series/[^/]+/(\d+)-(\d+)/?$""")
 
@@ -90,18 +99,16 @@ class SFlixProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         // jangan pakai tautan di h2.heading-name (di situs kadang menunjuk judul lain); pakai URL halaman
         val doc = app.get(url, referer = "$mainUrl/").document
-        val pageUrl = doc.selectFirst("link[rel=canonical]")?.attr("href")?.takeIf { it.startsWith("http") } ?: url
-        val title = doc.selectFirst(Sel.D_TITLE)?.text()?.trim()
+        val pageUrl = first(doc, "link[rel=canonical]")?.attr("href")?.takeIf { it.startsWith("http") } ?: url
+        val title = first(doc, Sel.D_TITLE)?.text()?.trim()
             ?: doc.title().removePrefix("Watch ").substringBefore(" Online").trim()
-        val poster = doc.selectFirst(Sel.D_POSTER)?.let { i ->
-            listOf("data-src", "src").map { i.attr(it).trim() }.firstOrNull { it.isNotBlank() && !it.startsWith("data:") }
-        }?.replace("/w185/", "/w500/")
-        val plot = doc.selectFirst(Sel.D_DESC)?.ownText()?.trim()?.takeIf { it.isNotBlank() }
+        val poster = imgUrl(first(doc, Sel.D_POSTER), "data-src", "src")?.replace("/w185/", "/w500/")
+        val plot = first(doc, Sel.D_DESC)?.ownText()?.trim()?.takeIf { it.isNotBlank() }
         val tags = rowOf(doc, "Genre")?.select("a")?.map { it.text().trim() }?.filter { it.isNotEmpty() }
         val cast = rowOf(doc, "Casts")?.select("a")?.map { it.text().trim() }?.filter { it.isNotEmpty() }
         val year = (rowOf(doc, "Released")?.text() ?: rowOf(doc, "Year")?.text())
             ?.let { Regex("""(19|20)\d{2}""").find(it)?.value?.toIntOrNull() }
-        val minutes = doc.selectFirst(Sel.D_DURATION)?.text()?.let { Regex("""\d+""").find(it)?.value?.toIntOrNull() }
+        val minutes = first(doc, Sel.D_DURATION)?.text()?.let { Regex("""\d+""").find(it)?.value?.toIntOrNull() }
 
         if (!pageUrl.contains("/series/")) {
             return newMovieLoadResponse(title, pageUrl, TvType.Movie, pageUrl) {
@@ -110,7 +117,7 @@ class SFlixProvider : MainAPI() {
                 this.year = year
                 this.tags = tags
                 this.duration = minutes
-                addActors(cast)
+                this.actors = cast?.map { ActorData(Actor(it)) }
             }
         }
 
@@ -134,7 +141,7 @@ class SFlixProvider : MainAPI() {
             this.plot = plot
             this.year = year
             this.tags = tags
-            addActors(cast)
+            this.actors = cast?.map { ActorData(Actor(it)) }
         }
     }
 
