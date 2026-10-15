@@ -8,5 +8,3 @@ Dibuat otomatis oleh `detect_selectors.py` dari fixture HTML nyata (tanpa akses 
 Tidak diproses / gagal:
 
 - **AnimeSailProvider**: dikunci manual
-- **MyFlixerProvider**: fixture tidak berubah (terakhir 2026-10-15)
-- **LayarKaca21Provider**: dikunci manual
