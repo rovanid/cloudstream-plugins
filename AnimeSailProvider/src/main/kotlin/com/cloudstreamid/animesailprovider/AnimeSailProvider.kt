@@ -31,8 +31,22 @@ class AnimeSailProvider : AdaptiveProvider() {
         playerAttrs = Sel.PLAYER_ATTRS,
         // Kategori ASLI situs (ditulis manual, tidak ditimpa script). Tanpa "Terbaru" otomatis.
         categories = listOf(
+            // Tab "Anime" di bagian "Anime Terbaru" beranda situs. Halaman 2 situs = /rilisan-anime-terbaru/page/2,
+            // jadi tanpa {page}: halaman 1 memakai URL dasar, halaman n memakai /page/n/ (pageStyle "path").
+            "/rilisan-anime-terbaru/" to "Anime Terbaru",
             "/movie-terbaru/page/{page}/" to "Movie Terbaru",
-            "/genres/donghua/page/{page}/" to "Donghua"
+            "/genres/donghua/page/{page}/" to "Donghua",
+            // Genre anime yang populer secara umum (dipilih manual). Semua slug terbukti ada di menu situs
+            // pada fixture (romance di detail.html). Daftar lengkap >100 genre ada di /genre/.
+            // Tanpa {page}: halaman 1 = URL dasar, halaman n = /page/n/.
+            "/genres/action/" to "Action",
+            "/genres/adventure/" to "Adventure",
+            "/genres/comedy/" to "Comedy",
+            "/genres/drama/" to "Drama",
+            "/genres/fantasy/" to "Fantasy",
+            "/genres/romance/" to "Romance",
+            "/genres/isekai/" to "Isekai",
+            "/genres/shounen/" to "Shounen"
         ),
         // Beranda AnimeSail berisi halaman EPISODE; load() otomatis naik ke halaman seri /anime/slug/
         extraItems = listOf("div.listupd article", "article.bs"),
