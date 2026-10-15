@@ -33,7 +33,7 @@ class AnimeSailProvider : AdaptiveProvider() {
         categories = listOf(
             // Tab "Anime" di bagian "Anime Terbaru" beranda situs. Halaman 2 situs = /rilisan-anime-terbaru/page/2,
             // jadi tanpa {page}: halaman 1 memakai URL dasar, halaman n memakai /page/n/ (pageStyle "path").
-            "/rilisan-anime-terbaru/" to "Anime Terbaru",
+            "/rilisan-anime-terbaru/page/{page}/" to "Anime Terbaru",
             "/movie-terbaru/page/{page}/" to "Movie Terbaru",
             "/genres/donghua/page/{page}/" to "Donghua",
             // Genre anime yang populer secara umum (dipilih manual). Semua slug terbukti ada di menu situs
