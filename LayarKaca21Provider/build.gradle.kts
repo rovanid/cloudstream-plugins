@@ -1,5 +1,5 @@
 // Naikkan otomatis oleh apply_domains.py saat domain berubah
-version = 1
+version = 2
 
 cloudstream {
     description = "LayarKaca21 - dibuild otomatis"
