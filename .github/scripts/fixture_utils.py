@@ -13,6 +13,9 @@ Aturan fixture (tahap "fixture dulu"):
     atau <meta property=og:url>. Kalau tidak ada petunjuk sama sekali, nama host harus muncul di
     isi HTML.
 """
+import base64
+import binascii
+import quopri
 import re
 from pathlib import Path
 from urllib.parse import urlparse
@@ -33,20 +36,56 @@ def rel_path(name: str, kind: str) -> str:
     return f"tests/kotlin/fixtures/{name}/{kind}.html"
 
 
+def _decode_part(headers: str, body: str) -> str:
+    """Dekode isi bagian MIME sesuai Content-Transfer-Encoding (quoted-printable/base64) dan charset-nya.
+    Chrome menyimpan HTML dengan quoted-printable: tanpa ini '=3D' dan soft line break merusak atribut."""
+    h = re.sub(r"\r?\n[ \t]+", " ", headers)             # gabungkan header yang dilipat
+    cte = re.search(r"(?im)^content-transfer-encoding:\s*([\w-]+)", h)
+    cte = cte.group(1).lower() if cte else ""
+    cs = re.search(r"(?i)charset\s*=\s*\"?([\w.:-]+)", h)
+    charset = cs.group(1) if cs else "utf-8"
+    if cte not in ("quoted-printable", "base64"):
+        return body
+    try:
+        if cte == "base64":
+            data = base64.b64decode(re.sub(r"\s+", "", body) + "=" * (-len(re.sub(r"\s+", "", body)) % 4))
+        else:
+            data = quopri.decodestring(body.encode("latin-1", "ignore"))
+        return data.decode(charset, "replace")
+    except LookupError:                                  # charset tak dikenal: anggap UTF-8
+        return data.decode("utf-8", "replace")
+    except (ValueError, binascii.Error):
+        return body
+
+
 def extract_html(raw: str) -> str:
-    """Chrome 'Simpan halaman' berformat MHTML (Saved by Blink): ambil bagian text/html pertama."""
-    if not raw.lstrip().startswith("From:") or "Saved by Blink" not in raw:
+    """Berkas MHTML (Chrome 'Simpan halaman' / multipart/related): ambil bagian text/html halaman utama
+    (Content-Location = Snapshot-Content-Location bila ada, kalau tidak yang pertama) dan dekode.
+    HTML biasa dikembalikan apa adanya."""
+    raw = raw.lstrip("\ufeff")                           # BOM di awal berkas
+    head = raw[:5000]
+    if not raw.lstrip().startswith(("From:", "MIME-Version:", "Subject:")) or not (
+            "Saved by Blink" in head or re.search(r"(?i)content-type:\s*multipart/related", head)):
         return raw
     m = re.search(r'boundary="?([^"\r\n;]+)"?', raw)
     if not m:
         return raw
+    main = source_url(raw)
+    first = None
     for part in raw.split("--" + m.group(1))[1:]:
         sep = re.search(r"\r?\n\r?\n", part)
         if not sep:
             continue
-        if re.search(r"(?i)content-type:\s*text/html", part[:sep.start()]):
-            return part[sep.end():]
-    return raw
+        headers, body = part[:sep.start()], part[sep.end():]
+        if not re.search(r"(?i)content-type:\s*text/html", headers):
+            continue
+        text = _decode_part(headers, body)
+        loc = re.search(r"(?im)^content-location:\s*(\S+)", headers)
+        if main and loc and loc.group(1) == main:
+            return text
+        if first is None:
+            first = text
+    return first if first is not None else raw
 
 
 def norm_host(host: str) -> str:
