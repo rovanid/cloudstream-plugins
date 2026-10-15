@@ -8,3 +8,4 @@ Dibuat otomatis oleh `detect_selectors.py` dari fixture HTML nyata (tanpa akses 
 Tidak diproses / gagal:
 
 - **AnimeSailProvider**: dikunci manual
+- **KuramanimeProvider**: dikunci manual
