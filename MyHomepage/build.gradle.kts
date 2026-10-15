@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 // Dinaikkan otomatis oleh bump_versions.py kalau isi folder ini berubah
-version = 1
+version = 2
 
 android {
     buildFeatures {
