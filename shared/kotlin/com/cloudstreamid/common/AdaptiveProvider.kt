@@ -693,6 +693,50 @@ abstract class AdaptiveProvider : MainAPI() {
         return embeds
     }
 
+    /**
+     * Situs yang daftar servernya dimuat JavaScript (mis. MyFlixer): HTML mentah dari server hanya berisi
+     * `const pl_url = 'https://situs/ajax/ajax.php?vdkz=...'`; tombol server baru muncul setelah browser
+     * memanggil URL itu. Tiru panggilan tersebut, lalu baca embed dari jawabannya (HTML atau JSON).
+     */
+    private suspend fun ajaxEmbeds(doc: Document, pageUrl: String, log: MutableList<String>): LinkedHashSet<String> {
+        val out = LinkedHashSet<String>()
+        val ajaxUrl = PL_URL_RE.find(doc.html())?.groupValues?.get(1)?.replace("\\/", "/") ?: return out
+        val text = try {
+            val r = app.get(
+                ajaxUrl,
+                referer = pageUrl,
+                headers = mapOf("X-Requested-With" to "XMLHttpRequest"),
+                interceptor = cf
+            )
+            log.add("ajax pl_url: HTTP ${r.code} ${r.text.length}B")
+            if (r.code !in 200..299) return out
+            r.text
+        } catch (e: Exception) {
+            log.add("ajax pl_url: ${e.javaClass.simpleName} ${e.message?.take(60)}")
+            return out
+        }
+        val t = text.trimStart()
+        val body = if (t.startsWith("{") || t.startsWith("[")) {
+            JSON_STR_RE.findAll(t).joinToString("\n") { unescapeJson(it.groupValues[1]) }
+        } else {
+            text
+        }
+        out.addAll(collectEmbeds(Jsoup.parse(body, pageUrl), pageUrl))
+        if (out.isEmpty()) {
+            for (m in Regex("https?://[^\\s\"'<>]+").findAll(body)) {
+                if (!ASSET_EXT.containsMatchIn(m.value)) addEmbedUrl(m.value, pageUrl, out)
+            }
+        }
+        log.add("ajax pl_url embed=${out.size}")
+        if (out.isEmpty()) dump("ajax", ajaxUrl, text)
+        return out
+    }
+
+    private fun unescapeJson(s: String): String = s
+        .replace("\\/", "/").replace("\\\"", "\"")
+        .replace("\\n", " ").replace("\\r", " ").replace("\\t", " ")
+        .replace(Regex("\\\\u([0-9a-fA-F]{4})")) { it.groupValues[1].toInt(16).toChar().toString() }
+
     /** <video><source> yang langsung ada di halaman. */
     private suspend fun pageSources(
         doc: Document,
@@ -857,6 +901,7 @@ abstract class AdaptiveProvider : MainAPI() {
         var ok = pageSources(doc, data, name, callback, seen)
 
         val embeds = collectEmbeds(doc, data)
+        if (embeds.isEmpty()) embeds.addAll(ajaxEmbeds(doc, data, log))
         val nIframe = doc.select("iframe").size
         val nOption = doc.select("option").size
         val nVideo = doc.select("video").size
@@ -924,9 +969,11 @@ abstract class AdaptiveProvider : MainAPI() {
         private val NAV_TAGS = setOf("header", "footer", "nav", "aside")
         private val IMG_ATTRS = listOf("data-src", "data-lazy-src", "data-original", "data-lazyload", "data-setbg", "data-bg", "src")
         private val ANCHOR_ATTRS = listOf(
-            "data-url", "data-src", "data-iframe", "data-embed", "data-em", "data-link", "data-player", "href"
+            "data-url", "data-src", "data-iframe", "data-embed", "data-em", "data-link", "data-player", "data-id", "href"
         )
         private const val MAX_EMBED_DEPTH = 3
+        private val PL_URL_RE = Regex("""(?:const|var|let)\s+pl_url\s*=\s*['"]([^'"]+)['"]""")
+        private val JSON_STR_RE = Regex("\"((?:\\\\.|[^\"\\\\])*)\"")
         private val SNIFF_RE = Regex("""(?i)(\.m3u8|\.mp4|googlevideo\.com/videoplayback)""")
         private val MEDIA_RE = Regex("""https?://[^\s"'<>\\]+?\.(?:m3u8|mp4)[^\s"'<>\\]*""")
         private val QUALITY_RE = Regex("(?<!\\d)(2160|1440|1080|720|480|360|240)(?!\\d)")
