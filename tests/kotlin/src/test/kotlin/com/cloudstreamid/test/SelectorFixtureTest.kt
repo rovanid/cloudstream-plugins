@@ -4,6 +4,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
 import java.io.File
 
@@ -11,6 +12,7 @@ import java.io.File
  * Menguji selector di Selectors.kt tiap plugin terhadap HTML ASLI yang disimpan di
  * tests/kotlin/fixtures/<NamaProvider>/{list,detail,episode}.html.
  * Fixture belum ada -> tes DILEWATI (bukan gagal), dan namanya tercetak di log.
+ * Daftar plugin mengikuti domains.yml otomatis (tambah / hapus / edit / nonaktifkan baris).
  */
 class SelectorFixtureTest {
 
@@ -23,22 +25,65 @@ class SelectorFixtureTest {
     )
 
     /**
-     * Daftar plugin diambil dari folder *Provider yang ada di root repo (bukan daftar tetap), lalu
-     * `object Sel` tiap plugin dibaca lewat refleksi. Plugin yang folder/Selectors.kt-nya sudah tidak ada
-     * otomatis tidak diuji.
+     * Daftar plugin dibaca LANGSUNG dari domains.yml setiap tes dijalankan (aturan sama dengan registry.py):
+     *   - `NamaProvider: https://host`   -> AKTIF, diuji
+     *   - `#NamaProvider: https://host`  -> NONAKTIF, dilewati (folder tetap ada, tidak dibuild)
+     *   - baris dihapus                  -> tidak diuji lagi
+     *   - baris baru                     -> otomatis ikut diuji (fixture belum ada -> dilewati, bukan gagal)
+     * `object Sel` tiap plugin aktif dibaca lewat refleksi; build.gradle.kts tes memasukkan Selectors.kt
+     * plugin aktif ke classpath dengan membaca domains.yml yang sama, jadi tidak ada daftar yang ditulis manual.
      */
-    private val sites: List<Site> = (File("../..").listFiles { f -> f.isDirectory && f.name.endsWith("Provider") }
-        ?.sortedBy { it.name } ?: emptyList())
-        .mapNotNull { dir ->
+    private class Registry(val active: List<String>, val disabled: List<String>)
+
+    private val repoRoot = File("../..")
+
+    private val registry: Registry? = readRegistry()
+
+    private fun readRegistry(): Registry? {
+        val f = File(repoRoot, "domains.yml")
+        if (!f.exists()) return null
+        val nameRe = Regex("[A-Za-z][A-Za-z0-9]*Provider")
+        val commented = Regex("^#\\s*([A-Za-z][A-Za-z0-9]*Provider)\\s*:\\s*https?://\\S+")
+        val active = linkedSetOf<String>()
+        val disabled = linkedSetOf<String>()
+        for (raw in f.readLines()) {
+            val s = raw.trim()
+            if (s.isEmpty()) continue
+            if (s.startsWith("#")) {
+                commented.find(s)?.let { disabled.add(it.groupValues[1]) }
+                continue
+            }
+            val line = s.substringBefore("#")
+            if (!line.contains(":")) continue
+            val name = line.substringBefore(":").trim()
+            if (nameRe.matches(name)) active.add(name)
+        }
+        disabled.removeAll(active)
+        return Registry(active.toList(), disabled.toList())
+    }
+
+    private val sites: List<Site> = (registry?.active ?: emptyList())
+        .mapNotNull { name ->
             val cls = try {
-                Class.forName("com.cloudstreamid.${dir.name.lowercase()}.Sel")
+                Class.forName("com.cloudstreamid.${name.lowercase()}.Sel")
             } catch (e: ClassNotFoundException) {
-                println("[LEWATI] ${dir.name}: Selectors.kt tidak ditemukan")
+                println("[LEWATI] $name: aktif di domains.yml tetapi Selectors.kt belum ada / belum dibuat")
                 return@mapNotNull null
             }
             fun str(field: String): String = cls.getField(field).get(null) as String
-            Site(dir.name, str("ITEM"), str("TITLE"), str("EPISODE"), str("PLAYER"))
+            Site(name, str("ITEM"), str("TITLE"), str("EPISODE"), str("PLAYER"))
         }
+        .also { list ->
+            registry?.disabled?.forEach { println("[NONAKTIF] $it: di-# di domains.yml, tidak diuji") }
+            println("[INFO] diuji: ${list.joinToString { it.name }.ifEmpty { "(tidak ada)" }}")
+        }
+
+    @Test
+    fun domains_yml_terbaca() {
+        val reg = registry
+        check(reg != null) { "domains.yml tidak ditemukan di ${repoRoot.canonicalPath}" }
+        check(reg.active.isNotEmpty()) { "domains.yml tidak punya entri aktif" }
+    }
 
     private fun fixture(site: String, kind: String): Document? {
         val f = File("fixtures/$site/$kind.html")
