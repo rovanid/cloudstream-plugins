@@ -184,11 +184,11 @@ class ValidateTest(unittest.TestCase):
                                           "PAGE_STYLE": "none", "PLAYER": "iframe"}, fx, BASE)
         self.assertTrue(any("minimal 3" in m for m in fatal))
 
-    def test_foreign_card_links_warn(self):
+    def test_foreign_card_links_are_fatal(self):
         h = "".join(f'<div class="ml-item"><a href="https://lain.example/{i}"><img src="a"></a><h2>t{i}</h2></div>' for i in range(8))
         fx = {"list": soup(page(h))}
         d = ds.detect_from_fixtures(BASE, fx)
-        self.assertTrue(any("lain" in w or "separuh" in w for w in ds.validate_selectors(d, fx, BASE)[1]))
+        self.assertTrue(any("separuh" in m for m in ds.validate_selectors(d, fx, BASE)[0]))
 
 
 class MainFlowTest(unittest.TestCase):
@@ -261,6 +261,237 @@ class MainFlowTest(unittest.TestCase):
     def test_disabled_entry_ignored(self):
         self.plugin(domains="#AProvider: https://x.example\nBProvider: https://b.example\n")
         self.assertEqual(ds.main(), 0)
+
+
+class CardStructureRegressionTest(unittest.TestCase):
+    """Struktur kartu berbeda-beda: deteksi mengandalkan DOM, bukan nama kelas tertentu."""
+
+    def sel(self, html):
+        r = ds.find_items(soup(html))
+        self.assertIsNotNone(r)
+        found = soup(html).select(r[0])
+        self.assertEqual(len(found), len(r[1]))           # selector benar-benar cocok dengan kartu yang terdeteksi
+        return r[0]
+
+    def test_card_with_badge_images_and_varying_classes(self):
+        h = "<div class='grid'>" + "".join(
+            f"<div class='item {'hot' if i % 2 else 'new'}'><a href='/watch/f-{i}'><img src='p{i}.jpg'>"
+            f"<img class='q' src='hd.png'></a><span>Film {i}</span></div>" for i in range(8)) + "</div>"
+        self.assertEqual(self.sel(h), "div.item")
+
+    def test_classless_list_items(self):
+        h = "<ul>" + "".join(f"<li><a href='/t/s-{i}'><img src='p{i}.jpg'><h3>Seri {i}</h3></a></li>" for i in range(6)) + "</ul>"
+        self.assertEqual(self.sel(h), "ul > li")
+
+    def test_other_class_name_not_hardcoded(self):
+        h = "".join(f"<section class='kotak'><a href='/f/{i}'><img src='a{i}'></a><h4>J{i}</h4></section>" for i in range(5))
+        self.assertEqual(self.sel(f"<main>{h}</main>"), "section.kotak")
+
+    def test_two_card_types_in_same_parent_picks_largest_and_matches_all(self):
+        a = "".join(f"<article class='bs'><a href='/a/{i}'><img src='x'></a></article>" for i in range(6))
+        b = "".join(f"<article class='bsz'><a href='/b/{i}'><img src='x'></a></article>" for i in range(4))
+        self.assertEqual(self.sel(f"<div class='l'>{a}</div><div class='l'>{b}</div>"), "article.bs")
+
+    def test_icon_lists_without_links_ignored(self):
+        stars = "<ul>" + "<li><img src='star.png'></li>" * 6 + "</ul>"
+        self.assertIsNone(ds.find_items(soup(stars)))
+
+    def test_mhtml_quoted_printable_is_decoded(self):
+        import quopri
+        body = LIST_HTML.replace("Film", "Film é")
+        qp = quopri.encodestring(body.encode("utf-8")).decode("ascii")
+        raw = ('From: <Saved by Blink>\r\nSnapshot-Content-Location: https://x.example/\r\n'
+               'Content-Type: multipart/related;\r\n\tboundary="----B----"\r\n\r\n'
+               '------B----\r\nContent-Type: text/html\r\nContent-Transfer-Encoding: quoted-printable\r\n'
+               f'Content-Location: https://x.example/\r\n\r\n{qp}\r\n------B------\r\n')
+        out = ds.extract_html(raw)
+        self.assertNotIn("=3D", out)
+        self.assertEqual(ds.find_items(soup(out))[0], "div.ml-item")
+
+
+def _mh(html, cte="", charset="utf-8", extra_parts="", nl="\r\n", bom=""):
+    """MHTML tiruan: halaman utama + (opsional) bagian text/html lain lebih dulu."""
+    enc = f"Content-Transfer-Encoding: {cte}{nl}" if cte else ""
+    return (f'{bom}From: <Saved by Blink>{nl}Snapshot-Content-Location: https://x.example/{nl}'
+            f'Content-Type: multipart/related;{nl}\tboundary="----B----"{nl}{nl}{extra_parts}'
+            f'------B----{nl}Content-Type: text/html; charset={charset}{nl}{enc}Content-Location: https://x.example/{nl}{nl}'
+            f'{html}{nl}------B------{nl}')
+
+
+class StructureDetectionTest(unittest.TestCase):
+    """Judul/deskripsi/episode/pemutar/daftar utama dikenali dari struktur, bukan daftar kelas tetap."""
+
+    def test_main_list_beats_larger_sidebar_widget(self):
+        main = "".join(f"<div class='kartu'><a href='/m/{i}'><img src='a'></a></div>" for i in range(6))
+        side = "".join(f"<div class='kartu'><a href='/s/{i}'><img src='a'></a></div>" for i in range(12))
+        for wrap in ("<aside>{}</aside>", "<div class='widget-box'>{}</div>", "<div id='sidebar'>{}</div>"):
+            h = f"<div class='isi'>{main}</div>" + wrap.format(side)
+            sel, cards = ds.find_items(soup(h))
+            self.assertEqual({card_href for card_href in (ds.card_href(c) for c in cards)},
+                             {f"/m/{i}" for i in range(6)})
+            self.assertEqual(len(soup(h).select(sel)), 6, sel)      # selector tidak menyeret kartu sidebar
+
+    def test_main_and_sidebar_under_same_parent_class_are_separated(self):
+        a = "".join(f"<article class='k'><a href='/m/{i}'><img src='a'></a></article>" for i in range(5))
+        b = "".join(f"<article class='k'><a href='/s/{i}'><img src='a'></a></article>" for i in range(9))
+        sel, cards = ds.find_items(soup(f"<main><div class='l'>{a}</div></main><aside><div class='l'>{b}</div></aside>"))
+        self.assertTrue(all(ds.card_href(c).startswith("/m/") for c in cards))
+
+    def test_title_found_by_text_match_not_class_name(self):
+        h = "<div class='g'>" + "".join(
+            f"<div class='c'><a href='/f/{i}' title='Judul {i}'><img src='p' alt='Judul {i}'></a>"
+            f"<div class='zq'>Judul {i}</div><div class='lbl'>HD</div></div>" for i in range(6)) + "</div>"
+        sel, cards = ds.find_items(soup(h))
+        self.assertEqual(ds.detect_title(cards), "div.zq")
+
+    def test_title_inside_link_with_generic_tag(self):
+        h = "<ul>" + "".join(f"<li><a href='/f/{i}'><img src='p'><span>Serial Hebat {i}</span><b>HD</b></a></li>"
+                              for i in range(6)) + "</ul>"
+        sel, cards = ds.find_items(soup(h))
+        self.assertEqual(ds.detect_title(cards), "span")
+
+    def test_description_by_meta_match_with_custom_class(self):
+        para = "Sinopsis panjang tentang petualangan seorang pemuda yang mencari arti hidup di dunia asing. " * 2
+        h = (f"<head><meta name='description' content='{para[:80]}'></head><body><div class='pj'><p>{para}</p></div>"
+             f"<aside class='sidebar'><p>{'Teks sidebar yang sangat panjang sekali ' * 6}</p></aside></body>")
+        d = soup(h)
+        self.assertEqual(ds.detect_desc(d), "div.pj")
+        self.assertEqual(d.select_one(ds.detect_desc(d)).name, "div")
+
+    def test_description_ignores_short_text(self):
+        self.assertEqual(ds.detect_desc(soup("<div class='x'>pendek</div>")), "")
+
+    def test_episodes_without_episode_keyword(self):
+        lis = "".join(f"<li><a href='/nonton/judul-{i}/'>{i}</a></li>" for i in (3, 2, 1, 4))
+        pag = "<div class='pagination'><a href='/page/2/'>2</a><a href='/page/3/'>3</a></div>"
+        sel, desc = ds.detect_episodes(soup(f"<ul class='chapter'>{lis}</ul>{pag}"), BASE + "/", min_count=1)
+        self.assertEqual(sel, "ul.chapter li a")
+
+    def test_numbered_links_in_sidebar_or_years_are_not_episodes(self):
+        side = "<aside><ul>" + "".join(f"<li><a href='/x/s-{i}/'>Hot {i}</a></li>" for i in range(5)) + "</ul></aside>"
+        years = "<ul class='thn'>" + "".join(f"<li><a href='/tahun/{y}/'>{y}</a></li>" for y in (2021, 2022, 2023)) + "</ul>"
+        self.assertEqual(ds.detect_episodes(soup(side + years), BASE + "/", min_count=1), ("", True))
+
+    def test_player_custom_data_attribute_when_no_known_one(self):
+        h = ("<div class='vplay'>" + "".join(f"<button data-stream='https://v.example/embed/{i}'>S{i}</button>"
+                                              for i in range(3)) + "</div><div data-article-url='https://x.example/a/'></div>")
+        sel = ds.detect_player(soup(h), BASE)
+        self.assertEqual(sel, "div.vplay button[data-stream]")
+
+    def test_player_iframe_gets_container_context(self):
+        h = "<iframe src='https://ads.example/x'></iframe><div class='player'><iframe src='https://v.example/e'></iframe></div>"
+        self.assertEqual(ds.detect_player(soup(h), BASE), "div.player iframe")
+
+    def test_extra_player_attr_is_rendered_into_kotlin(self):
+        d = {"ITEM": "div.a", "TITLE": "", "SEARCH": "", "PAGE_STYLE": "none", "PAGE_PARAM": "page", "POSTER": "",
+             "DESC": "", "GENRE": "", "EPISODE": "", "EPISODES_DESC": True, "USE_OG_IMAGE": True, "USE_OG_DESC": True,
+             "PLAYER": "div.v button[data-stream]", "CATEGORIES": [], "_extra_attrs": ["data-stream"]}
+        self.assertIn('"data-stream"', ds.render("aprovider", d, "2026-10-15"))
+
+
+class MhtmlEncodingTest(unittest.TestCase):
+    BODY = LIST_HTML.replace("Film", "Fílm é ü")
+
+    def check(self, raw):
+        out = ds.extract_html(raw)
+        self.assertIn("Fílm é ü", out)
+        self.assertEqual(ds.find_items(soup(out))[0], "div.ml-item")
+
+    def test_quoted_printable_latin1(self):
+        import quopri
+        self.check(_mh(quopri.encodestring(self.BODY.encode("iso-8859-1")).decode("ascii"), "quoted-printable", "iso-8859-1"))
+
+    def test_base64_utf8(self):
+        enc = base64.encodebytes(self.BODY.encode("utf-8")).decode("ascii")
+        self.check(_mh(enc, "base64"))
+
+    def test_8bit_and_binary_untouched(self):
+        for cte in ("8bit", "binary", ""):
+            self.check(_mh(self.BODY, cte))
+
+    def test_lf_only_line_endings_and_bom(self):
+        import quopri
+        qp = quopri.encodestring(self.BODY.encode("utf-8")).decode("ascii")
+        self.check(_mh(qp, "quoted-printable", nl="\n", bom="\ufeff"))
+
+    def test_uppercase_headers_unknown_charset_falls_back_to_utf8(self):
+        import quopri
+        qp = quopri.encodestring(self.BODY.encode("utf-8")).decode("ascii")
+        raw = _mh(qp, "quoted-printable", "x-tidak-ada").replace("Content-Transfer-Encoding", "CONTENT-TRANSFER-ENCODING")
+        self.check(raw)
+
+    def test_main_frame_chosen_over_earlier_subframe(self):
+        sub = ('------B----\r\nContent-Type: text/html\r\nContent-Location: https://ads.example/f\r\n\r\n'
+               "<html><body><p>iklan</p></body></html>\r\n")
+        out = ds.extract_html(_mh(self.BODY, extra_parts=sub))
+        self.assertIn("ml-item", out)
+        self.assertNotIn("iklan", out)
+
+
+class HomepageWithTrendingTabsTest(unittest.TestCase):
+    """Pola situs nyata (myflixer): daftar utama + tab trending berkelas kartu sama; menu bernama ul.nav."""
+
+    def test_short_selector_kept_and_extra_cards_warned(self):
+        def wrap(cls, pre, n):
+            return f"<{pre} class='{cls}'><div class='block_area-content'><div class='film_list-wrap'>" + "".join(
+                f"<div class='flw-item'><a href='/movie/{cls}-{i}/'><img src='a'></a><h3 class='film-name'>F{i}</h3></div>"
+                for i in range(n)) + f"</div></div></{pre}>"
+        menu = "<ul class='nav header_menu-list'><li class='nav-item'><a href='/movies/'>Movies</a></li></ul>"
+        h = page(menu + wrap("block_area home", "section", 8) + wrap("tab-pane", "div", 5))
+        fx = {"list": soup(h)}
+        d = ds.detect_from_fixtures(BASE, fx)
+        self.assertEqual(d["ITEM"], "div.flw-item")
+        self.assertEqual(d["_item_extra"], 5)
+        self.assertEqual(d["CATEGORIES"], [("/movies/", "Movies")])
+        fatal, warn = ds.validate_selectors(d, fx, BASE)
+        self.assertEqual(fatal, [])
+        self.assertTrue(any("di luar daftar utama" in w for w in warn))
+
+
+class LinklessCardsTest(unittest.TestCase):
+    def test_cards_without_links_fail_with_clear_reason_not_guessed(self):
+        h = "<div class='movies-grid'>" + "".join(
+            f"<div class='movie-card'><img src='p{i}.jpg'><h3 class='movie-title'>Film {i}</h3></div>" for i in range(8)) + "</div>"
+        self.assertIsNone(ds.find_items(soup(h)))
+        with self.assertRaises(RuntimeError) as cm:
+            ds.detect_from_fixtures(BASE, {"list": soup(page(h))})
+        self.assertIn("TANPA tautan detail", str(cm.exception))
+        self.assertIn("div.movie-card", str(cm.exception))
+
+
+class AdBannerVsRealListTest(unittest.TestCase):
+    def test_internal_list_beats_larger_external_ad_group(self):
+        ads = "".join(f"<div class='mx-auto'><a href='https://dub.sh/x{i}'><img src='ad{i}.png'></a></div>" for i in range(12))
+        real = "".join(f"<div class='kt'><a href='/anime/{i}/x'><img src='p{i}.jpg'></a><h3>Judul {i}</h3></div>" for i in range(6))
+        h = soup(page(f"<div class='iklan'>{ads}</div><div class='daftar'>{real}</div>"))
+        sel, cards = ds.find_items(h, BASE)
+        self.assertEqual(sel, "div.kt")
+
+    def test_only_ads_with_posters_is_rejected_by_validation(self):
+        ads = "".join(f"<div class='mx-auto'><a href='https://dub.sh/x{i}'><img src='ad{i}.png'></a></div>" for i in range(12))
+        text_list = "".join(f"<div class='col'><a href='/anime/{i}/x'>Judul {i}</a></div>" for i in range(20))
+        fx = {"list": soup(page(ads + text_list))}
+        d = ds.detect_from_fixtures(BASE, fx)
+        self.assertTrue(any("separuh" in m for m in ds.validate_selectors(d, fx, BASE)[0]))
+
+
+class FailureKeepsOldFileTest(MainFlowTest):
+    def test_failed_validation_keeps_previous_selectors(self):
+        f = self.plugin(header="// @auto-detect | detected: 2026-01-01 | score: 5 | fixtures: oldhash")
+        before = f.read_text()
+        self.fixtures(list_body="<p>tidak ada daftar</p>")
+        self.assertEqual(ds.main(), 1)
+        self.assertEqual(f.read_text(), before)
+        self.assertFalse(list(f.parent.glob("*.tmp")))
+
+    def test_mhtml_list_fixture_generates_matching_selector(self):
+        from fixture_helpers import mhtml
+        f = self.plugin()
+        self.fixtures()
+        fxp = self.root / "tests/kotlin/fixtures/AProvider/list.html"
+        fxp.write_text(mhtml("x.example", cards(8, cls="kartu-x")), encoding="utf-8")
+        self.assertEqual(ds.main(), 0)
+        self.assertIn('const val ITEM = "div.kartu-x"', f.read_text())
 
 
 class RealFixtureRegressionTest(unittest.TestCase):
