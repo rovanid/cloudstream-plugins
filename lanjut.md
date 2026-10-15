@@ -1,6 +1,6 @@
 # lanjut.md — dokumen utama kesinambungan proyek
 
-Diperbarui: 14 Okt 2026 (sesi tahap 3 + patch kecil). Dokumen ini adalah SUMBER UTAMA. `PROJECT_STATE.md` (status fitur) dan `NEXT_STEPS.md` (tugas) melengkapinya; `docs/AUDIT.md` berisi temuan audit.
+Diperbarui: 15 Okt 2026 (sesi MyHomepage; sebelumnya tahap 3 + patch kecil). Dokumen ini adalah SUMBER UTAMA. `PROJECT_STATE.md` (status fitur) dan `NEXT_STEPS.md` (tugas) melengkapinya; `docs/AUDIT.md` berisi temuan audit.
 
 ## 1. Proyek
 Repo plugin CloudStream (`rovanid/cloudstream-plugins`, dari `repo.json`) untuk sumber anime/film berbahasa Indonesia. Sasaran: domain di `domains.yml` dikelola otomatis dan aman; metadata dan pemutaran video benar; ada pemantauan, notifikasi, dan CI/CD.
@@ -11,7 +11,7 @@ Repo plugin CloudStream (`rovanid/cloudstream-plugins`, dari `repo.json`) untuk 
 - `.github/workflows/`: `build.yml`, `health.yml`, `domain-watch.yml`, `pr-check.yml`
 - `shared/kotlin/com/cloudstreamid/common/AdaptiveProvider.kt` (mesin parser generik, 992 baris) dan `SiteConfig.kt`
 - Plugin: `AnimeSailProvider/`, `KuronimeProvider/`, `LayarKaca21Provider/` (masing-masing `Selectors.kt`, `*Provider.kt`, `*Plugin.kt`, `build.gradle.kts`)
-- `tests/` (Python unittest), laporan: `detection_report.md`, `playback_report.md`, `playback_state.json`
+- Plugin mandiri: `MyHomepage/` (bukan scraper; lihat 7f). `tests/` (Python unittest), laporan: `detection_report.md`, `playback_report.md`, `playback_state.json`
 
 ## 3. Alur
 `domains.yml` → `registry.py` (gerbang) → `sync_plugins.py` → `apply_domains.py` (mainUrl) → `generate_json.py repo` → `detect_selectors.py` → `bump_versions.py` (version) → commit → Gradle build → `generate_json.py plugins` → branch `builds`.
@@ -77,6 +77,13 @@ Domain: `domain-watch.yml` → `check_domains.py --apply` → registry+tes → P
 - Fixture detail.html AnimeSail hanya punya 1 episode (tes lemah). Fixture Kuronime/LayarKaca21 belum ada (simpan "hanya HTML").
 - Berikutnya: jalankan `kotlin-test.yml` di branch `test/**`, cek hasilnya (harus ada tes AnimeSail yang lulus, bukan dilewati).
 
+## 7f. MyHomepage dibuat ulang dan diterapkan (15 Okt 2026)
+- Sumber: modul `MyHomepage` dari zip "M3U-Playlist-Player-Repo-for-Cloudstream". Dipindah ke `MyHomepage/` dengan package `com.cloudstreamid.myhomepage` (sub-package `settings`), author "Plugin ID", import tak terpakai dibuang; logika, layout, dan drawable TIDAK diubah. `AndroidManifest.xml` kosong ditambahkan (seperti plugin lain). `metadata.json` milik repo asal tidak dibawa.
+- Fungsi: beranda kustom yang mengumpulkan kategori (`mainPage`) plugin lain lewat refleksi `APIHolder.allProviders`; pencarian paralel (maks 4) dan `load()` bergantian ke plugin terpilih; simpan pilihan di SharedPreferences `MyHomepagePrefs`.
+- Perubahan infrastruktur: (1) `build.gradle.kts` root memasukkan `shared/kotlin` hanya ke project ber-akhiran `Provider`; (2) `bump_versions.py` punya `read_standalone()` dan `fingerprint(use_shared=False)` untuk plugin mandiri; (3) tes baru: `StandalonePluginTest` (4) dan `test_standalone_plugin_is_never_pruned` (1). `sync_plugins.py`/`registry.py`/`generate_json.py` tidak diubah (MyHomepage tidak cocok `*Provider`, jadi aman dari prune; `generate_json` memakai folder ber-`build.gradle.kts`).
+- Hasil lokal: 149 tes Python lulus; `registry.py` OK; simulasi `generate_json.py plugins` memuat MyHomepage (v1, status 3, tvTypes valid); `bump_versions.py --dry-run` = `[SAMA]` untuk dua provider lama dan `[BASELINE]` untuk MyHomepage. Semua XML resource well-formed; id/layout/drawable yang dirujuk Kotlin ada.
+- BELUM DIVERIFIKASI: kode Kotlin MyHomepage belum dikompilasi (sandbox tanpa kotlinc/Gradle/jaringan) dan belum dijalankan di aplikasi. Kompilasi asli memakai AGP 8.13.2/Kotlin 2.3.0; repo ini AGP 8.7.3/Kotlin 2.4.0. RISIKO: karena `gradle make` membangun semua modul, error kompilasi MyHomepage menggagalkan build SELURUH repo. Uji dulu di branch `test/...`.
+
 ## 8. Masalah terbuka
 Lihat `docs/AUDIT.md` temuan 6–11 (3 dan 4 selesai di kode, belum diuji di Actions). Khusus: `plugin_hashes.json` baru terisi baseline; di build nyata pertama, `detect_selectors.py` bisa mengubah Selectors.kt sehingga versi naik (itu benar). PR buatan `GITHUB_TOKEN` tidak memicu `pr-check.yml` (gerbang tes sudah ada di dalam `domain-watch.yml`); `health.yml` masih `|| true` pada push.
 
@@ -103,4 +110,4 @@ Lihat `NEXT_STEPS.md`.
 Baca dokumen ini, `PROJECT_STATE.md`, `NEXT_STEPS.md`, `docs/AUDIT.md`. Periksa ulang kode terhadap klaim di sini, jalankan tes, lalu kerjakan tugas prioritas tertinggi di `NEXT_STEPS.md`. Jangan klaim build/playback berhasil sebelum benar-benar dijalankan.
 
 ## 14. Belum diverifikasi
-Semua hal yang butuh jaringan: domain aktif sekarang, build Gradle, kompatibilitas Kotlin 2.4.0, `domain-watch.yml` di Actions nyata, playback di Android.
+Semua hal yang butuh jaringan: domain aktif sekarang, build Gradle (termasuk kompilasi MyHomepage), kompatibilitas Kotlin 2.4.0, `domain-watch.yml` di Actions nyata, playback di Android.

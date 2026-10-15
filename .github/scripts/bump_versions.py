@@ -2,6 +2,13 @@
 """
 Naikkan `version` di build.gradle.kts tiap plugin AKTIF kalau isinya berubah sejak build terakhir.
 
+Dua macam plugin:
+  - plugin scraper `*Provider`: aktif kalau barisnya ada (tanpa #) di domains.yml; sidik jarinya
+    mencakup shared/kotlin karena kode itu ikut dikompilasi ke setiap plugin scraper.
+  - plugin MANDIRI (mis. MyHomepage): folder tingkat atas ber-build.gradle.kts + src/ yang namanya bukan
+    *Provider. Tidak ada di domains.yml (tidak punya situs), selalu aktif, dan sidik jarinya hanya isi
+    foldernya sendiri (build.gradle.kts root tidak memasukkan shared/kotlin ke plugin ini).
+
 Cloudstream hanya memperbarui plugin di perangkat pengguna kalau `version` naik. Sebelumnya versi
 hanya naik saat mainUrl berubah, sehingga perbaikan di shared/kotlin (AdaptiveProvider.kt) atau
 tuning manual Selectors.kt/SiteConfig tidak sampai ke pengguna.
@@ -54,6 +61,16 @@ def read_active(path: Path) -> list:
     return names
 
 
+def read_standalone(root: Path) -> list:
+    """Plugin mandiri: folder tingkat atas ber-build.gradle.kts + src/ yang namanya bukan *Provider."""
+    names = []
+    for d in sorted(root.iterdir(), key=lambda p: p.name):
+        if (d.is_dir() and not d.name.startswith(".") and not NAME_RE.fullmatch(d.name)
+                and (d / "build.gradle.kts").exists() and (d / "src").is_dir()):
+            names.append(d.name)
+    return names
+
+
 def _normalized(path: Path) -> bytes:
     data = path.read_bytes().replace(b"\r\n", b"\n")
     if path.name == "build.gradle.kts":
@@ -74,9 +91,12 @@ def _files(base: Path):
         yield f
 
 
-def fingerprint(root: Path, folder: Path) -> str:
+def fingerprint(root: Path, folder: Path, use_shared: bool = True) -> str:
     h = hashlib.sha256()
-    for label, base in (("shared", root / "shared" / "kotlin"), ("plugin", folder)):
+    bases = [("plugin", folder)]
+    if use_shared:
+        bases.insert(0, ("shared", root / "shared" / "kotlin"))
+    for label, base in bases:
         for f in _files(base):
             h.update(f"{label}/{f.relative_to(base).as_posix()}".encode("utf-8"))
             h.update(b"\0")
@@ -109,13 +129,15 @@ def run(root: Path, dry_run: bool = False) -> list:
             print(f"[WARN] {STATE_NAME} rusak, semua plugin dicatat ulang sebagai baseline")
 
     results, new_state = [], dict(state)
-    for name in read_active(root / "domains.yml"):
+    names = read_active(root / "domains.yml")
+    names += [n for n in read_standalone(root) if n not in names]
+    for name in names:
         folder = root / name
         gradle = folder / "build.gradle.kts"
         if not gradle.exists():
             results.append((name, "LEWAT", None, None))
             continue
-        fp = fingerprint(root, folder)
+        fp = fingerprint(root, folder, use_shared=bool(NAME_RE.fullmatch(name)))
         if name not in state:
             results.append((name, "BASELINE", None, None))
         elif state[name] != fp:

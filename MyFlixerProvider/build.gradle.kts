@@ -1,5 +1,5 @@
 // Naikkan otomatis oleh apply_domains.py saat domain berubah
-version = 2
+version = 1
 
 cloudstream {
     description = "MyFlixer - dibuild otomatis"

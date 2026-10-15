@@ -33,6 +33,15 @@ class DisabledTest(unittest.TestCase):
         sync_plugins.prune(sync_plugins.read_flat(r / "domains.yml"), frozenset(sync_plugins.read_disabled(r / "domains.yml")))
         self.assertTrue((r / "BProvider" / "src" / "Keep.kt").exists())
 
+    def test_standalone_plugin_is_never_pruned(self):
+        """MyHomepage tidak ada di domains.yml (tanpa situs) dan namanya bukan *Provider: jangan dihapus."""
+        r = make("AProvider: https://a.com\n", ["AProvider", "MyHomepage"])
+        sync_plugins.ROOT = r
+        sync_plugins.prune(sync_plugins.read_flat(r / "domains.yml"), frozenset())
+        self.assertTrue((r / "MyHomepage" / "src" / "Keep.kt").exists())
+        rep = registry.validate(r, require_fixtures=False)
+        self.assertFalse(any("MyHomepage" in w for w in rep.warnings))
+
     def test_deleted_line_removes_folder(self):
         r = make("AProvider: https://a.com\n", ["AProvider", "BProvider"])
         sync_plugins.ROOT = r

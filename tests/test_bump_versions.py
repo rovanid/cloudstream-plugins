@@ -141,5 +141,54 @@ class BumpTest(unittest.TestCase):
         self.assertEqual(version(r, "AProvider"), 5)
 
 
+def add_standalone(root: Path, name: str = "MyHomepage") -> Path:
+    d = root / name
+    (d / "src" / "main").mkdir(parents=True)
+    (d / "build.gradle.kts").write_text("version = 1\n\ncloudstream { status = 3 }\n", encoding="utf-8")
+    (d / "src" / "main" / "Home.kt").write_text("class Home\n", encoding="utf-8")
+    return d
+
+
+class StandalonePluginTest(unittest.TestCase):
+    """Plugin mandiri (mis. MyHomepage): bukan *Provider, tidak ada di domains.yml, tanpa shared/kotlin."""
+
+    def test_standalone_is_baselined_then_stable(self):
+        r = make_repo()
+        add_standalone(r)
+        self.assertEqual(actions(bump_versions.run(r))["MyHomepage"], "BASELINE")
+        self.assertEqual(actions(bump_versions.run(r))["MyHomepage"], "SAMA")
+        self.assertEqual(version(r, "MyHomepage"), 1)
+
+    def test_standalone_bumps_when_own_code_changes(self):
+        r = make_repo()
+        d = add_standalone(r)
+        bump_versions.run(r)
+        (d / "src" / "main" / "Home.kt").write_text("class Home2\n", encoding="utf-8")
+        a = actions(bump_versions.run(r))
+        self.assertEqual(a["MyHomepage"], "NAIK")
+        self.assertEqual(a["AProvider"], "SAMA")
+        self.assertEqual(version(r, "MyHomepage"), 2)
+        self.assertEqual(actions(bump_versions.run(r))["MyHomepage"], "SAMA")   # tidak naik dua kali
+
+    def test_shared_change_does_not_bump_standalone(self):
+        r = make_repo()
+        add_standalone(r)
+        bump_versions.run(r)
+        (r / "shared" / "kotlin" / "Engine.kt").write_text("// engine v2\n", encoding="utf-8")
+        a = actions(bump_versions.run(r))
+        self.assertEqual(a["MyHomepage"], "SAMA")
+        self.assertEqual(a["AProvider"], "NAIK")
+        self.assertEqual(version(r, "MyHomepage"), 1)
+
+    def test_read_standalone_ignores_non_plugin_dirs(self):
+        r = make_repo()
+        add_standalone(r)
+        (r / "docs").mkdir()                                    # tanpa build.gradle.kts
+        (r / "tests" / "kotlin").mkdir(parents=True)
+        (r / "tests" / "kotlin" / "build.gradle.kts").write_text("x\n")   # bukan tingkat atas
+        (r / ".github").mkdir()
+        self.assertEqual(bump_versions.read_standalone(r), ["MyHomepage"])
+
+
 if __name__ == "__main__":
     unittest.main()

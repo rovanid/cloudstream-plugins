@@ -51,8 +51,11 @@ subprojects {
             targetSdk = 35
         }
 
-        // Kode bersama (mesin scraper adaptif) ikut dikompilasi ke setiap plugin
-        sourceSets.getByName("main").java.srcDir(rootProject.file("shared/kotlin"))
+        // Kode bersama (mesin scraper adaptif) ikut dikompilasi ke setiap plugin scraper (*Provider).
+        // Plugin mandiri seperti MyHomepage tidak memakainya, jadi tidak ikut membawa AdaptiveProvider.
+        if (project.name.endsWith("Provider")) {
+            sourceSets.getByName("main").java.srcDir(rootProject.file("shared/kotlin"))
+        }
 
         compileOptions {
             sourceCompatibility = JavaVersion.VERSION_1_8

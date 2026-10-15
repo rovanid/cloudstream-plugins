@@ -109,6 +109,22 @@ pencarian, pagination, kategori beranda, deskripsi, genre, episode, pemutar. Rin
   pencarian tanpa `<form>` (digerakkan JS) tidak bisa diketahui URL-nya. Pemutar yang dimuat lewat AJAX/token
   tidak ada di `episode.html`. Semuanya muncul sebagai ❌ dan perlu disetel manual.
 
+## MyHomepage (plugin mandiri)
+
+`MyHomepage/` adalah plugin **bukan scraper**: ia menggabungkan kategori beranda dari plugin lain yang terpasang
+menjadi satu beranda kustom (tanpa sync akun). Porting dari modul MyHomepage di repo M3U Playlist Player.
+
+- **Pakai**: pasang plugin → di aplikasi buka pengaturan plugin *My Homepage* → ikon edit → centang kategori dari
+  plugin mana pun → ikon urutan untuk menyusun → simpan, restart aplikasi. Pilih "🏠 My Homepage" sebagai penyedia beranda.
+  Pencarian dan `load()` diteruskan ke plugin-plugin yang kategorinya dipilih. Ada Cadangkan/Pulihkan (`/Download/my_homepage_config.json`) dan Reset.
+- **Tidak ada di `domains.yml`** (tidak punya situs) dan namanya bukan `*Provider`, jadi tidak diperiksa fixture, tidak
+  dihapus `sync_plugins.py`, dan tidak disentuh `apply_domains.py`. `settings.gradle.kts` tetap memasukkannya (ada `build.gradle.kts`).
+- **Versi otomatis** tetap jalan: `bump_versions.py` menghitung sidik jari isi foldernya saja (tanpa `shared/kotlin`, yang memang
+  tidak dikompilasi ke plugin ini; lihat `build.gradle.kts` root).
+- **Nonaktifkan**: isi `val disabled = mutableSetOf("MyHomepage")` di `settings.gradle.kts` (baris `#` di `domains.yml` tidak berlaku untuk plugin mandiri).
+- Status awal `3` (Beta-only) sampai dicoba di aplikasi; ubah ke `1` di `MyHomepage/build.gradle.kts`.
+- Package `com.cloudstreamid.myhomepage`; layout/drawable dibaca lewat `BuildConfig.LIBRARY_PACKAGE_NAME`, jadi `buildConfig = true` dan `requiresResources = true` wajib dipertahankan.
+
 ## Catatan
 
 - Jangan ubah format baris `override var mainUrl = "..."`, karena dibaca `apply_domains.py`.
