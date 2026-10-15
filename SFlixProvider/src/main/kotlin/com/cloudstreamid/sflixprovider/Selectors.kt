@@ -18,7 +18,7 @@ object Sel {
     const val D_DESC = ".description"
     const val D_ROW = ".elements .row-line"
     const val D_DURATION = ".film-stats .duration"
-    const val SEASON_ITEM = "a[data-ss]"
+    const val SEASON_ITEM = "a.ss-item[data-ss]"
     const val EPISODE = "a.eps-item[href]"
     const val SERVER = "li.sv-item[data-id]"
 }

@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.newExtractorLink
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
@@ -80,16 +81,36 @@ class SFlixProvider : MainAPI() {
 
     private val epHref = Regex("""/series/[^/]+/(\d+)-(\d+)/?$""")
 
+    /** GET ke ajax.php seperti yang dilakukan JS situs; hasilnya potongan HTML. */
+    private suspend fun ajaxDoc(url: String, referer: String): Document? {
+        return try {
+            val txt: String = app.get(
+                fixUrl(url), referer = referer,
+                headers = mapOf("X-Requested-With" to "XMLHttpRequest")
+            ).text
+            val d: Document = Jsoup.parse(txt)
+            d
+        } catch (e: Exception) {
+            Log.w(TAG, "ajax gagal: ${e.javaClass.simpleName} ${url.take(80)}")
+            null
+        }
+    }
+
     private fun episodesOf(doc: Document, out: LinkedHashMap<String, Episode>) {
-        val names = doc.select("h3.film-name a.eps-item[href]").associate { it.attr("href") to it.text().trim() }
-        for (a in doc.select(Sel.EPISODE)) {
-            val href = fixUrlNull(a.attr("href").trim()) ?: continue
+        val names = HashMap<String, String>()
+        for (a: Element in doc.select("h3.film-name a[href]")) {
+            val t: String = a.text().trim()
+            if (t.isNotBlank()) names[a.attr("href")] = t
+        }
+        for (a: Element in doc.select("a[href]")) {
+            val raw: String = a.attr("href").trim()
+            val href = fixUrlNull(raw) ?: continue
             val m = epHref.find(href) ?: continue
             if (out.containsKey(href)) continue
             val s = m.groupValues[1].toInt()
             val e = m.groupValues[2].toInt()
             out[href] = newEpisode(href) {
-                this.name = names[a.attr("href")]?.takeIf { it.isNotBlank() }
+                this.name = names[raw]?.takeIf { it.isNotBlank() }
                 this.season = s
                 this.episode = e
             }
@@ -121,19 +142,18 @@ class SFlixProvider : MainAPI() {
             }
         }
 
-        // Serial: halaman seri hanya memuat episode musim yang aktif. Musim lain dicoba lewat
-        // /series/slug-ID/<musim>-1/ (pola URL episode situs). BELUM terverifikasi: lihat catatan.
+        // Serial: episode TIDAK ada di HTML mentah. Dimuat JS lewat ajax.php?episode=<token>; tiap musim
+        // punya token sendiri di <a class="ss-item" data-ss data-id>. Kita lakukan GET yang sama.
         val episodes = LinkedHashMap<String, Episode>()
-        episodesOf(doc, episodes)
-        val seasons = doc.select(Sel.SEASON_ITEM).mapNotNull { it.attr("data-ss").toIntOrNull() }.distinct().sorted()
-        val have = episodes.values.mapNotNull { it.season }.toSet()
-        for (s in seasons) {
-            if (s in have) continue
-            try {
-                episodesOf(app.get(pageUrl.trimEnd('/') + "/$s-1/", referer = pageUrl).document, episodes)
-            } catch (e: Exception) {
-                Log.w(TAG, "musim $s gagal dimuat: ${e.javaClass.simpleName}")
-            }
+        val html = doc.html()
+        val tokens = ArrayList<String>()
+        for (a: Element in doc.select(Sel.SEASON_ITEM)) {
+            val t: String = a.attr("data-id").trim()
+            if (t.isNotBlank()) tokens.add("$mainUrl/ajax/ajax.php?episode=$t")
+        }
+        if (tokens.isEmpty()) CURRENT_URL_RE.find(html)?.groupValues?.get(1)?.let { tokens.add(it) }
+        for (u in tokens) {
+            ajaxDoc(u, pageUrl)?.let { episodesOf(it, episodes) }
         }
         val sorted = episodes.values.sortedWith(compareBy({ it.season ?: 0 }, { it.episode ?: 0 }))
         return newTvSeriesLoadResponse(title, pageUrl, TvType.TvSeries, sorted) {
@@ -146,6 +166,16 @@ class SFlixProvider : MainAPI() {
     }
 
     // ------------------------------------------------------------------- video
+    private fun serversOf(doc: Document?): List<Pair<String, String>> {
+        if (doc == null) return emptyList()
+        val out = ArrayList<Pair<String, String>>()
+        for (li: Element in doc.select(Sel.SERVER)) {
+            val id: String = li.attr("data-id").trim()
+            if (id.startsWith("http")) out.add(li.attr("data-srv").trim() to id)
+        }
+        return out.distinctBy { it.second }
+    }
+
     /**
      * Halaman film/episode memuat daftar server sebagai <li class="sv-item" data-srv data-id="URL embed">.
      * Embed berupa host pihak ketiga (0123movie.space, vidsrc.cc, player.videasy.net). Urutan: ekstraktor
@@ -157,15 +187,35 @@ class SFlixProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val doc = app.get(data, referer = "$mainUrl/").document
-        val servers = doc.select(Sel.SERVER)
-            .map { it.attr("data-srv").trim() to it.attr("data-id").trim() }
-            .filter { it.second.startsWith("http") }
-            .distinctBy { it.second }
+        val pageHtml: String = app.get(data, referer = "$mainUrl/").text
+        // Server TIDAK ada di HTML mentah: JS memuatnya dari const pl_url (ajax.php?vdkz=/vds=<token>)
+        var servers: List<Pair<String, String>> = emptyList()
+        val pl = PL_URL_RE.find(pageHtml)?.groupValues?.get(1)
+        if (pl != null) servers = serversOf(ajaxDoc(pl, data))
+        if (servers.isEmpty()) servers = serversOf(Jsoup.parse(pageHtml))
         if (servers.isEmpty()) throw ErrorLoadingException("Daftar server kosong di halaman $data")
 
+        // UpCloud (/mv/) dan Vidmoly (/vmf/) di 0123movie.space sama-sama 302 ke embed Byse
+        // (mfw09.org/e/<kode>). Ikuti redirect-nya supaya duplikat terbuang dan host aslinya terlihat.
+        val resolved = ArrayList<Pair<String, String>>()
+        for ((srv, u) in servers) {
+            var target = u
+            if (u.contains("0123movie.space")) {
+                try {
+                    val r = app.get(u, referer = "$mainUrl/", allowRedirects = false)
+                    val loc: String? = r.headers["Location"]
+                    if (!loc.isNullOrBlank() && loc.startsWith("http")) target = loc
+                } catch (e: Exception) {
+                    Log.w(TAG, "redirect $srv gagal: ${e.javaClass.simpleName}")
+                }
+            }
+            resolved.add(srv to target)
+        }
+        val embeds = resolved.distinctBy { it.second }
+        Log.d(TAG, "embed: " + embeds.joinToString { "${it.first}=${it.second.take(60)}" })
+
         var ok = false
-        for ((_, url) in servers) {
+        for ((_, url) in embeds) {
             try {
                 ok = loadExtractor(url, "$mainUrl/", subtitleCallback, callback) || ok
             } catch (e: Exception) {
@@ -174,15 +224,23 @@ class SFlixProvider : MainAPI() {
         }
         if (ok) return true
 
+        // Pemutar Byse/JW dirender JS dan memuat HLS sesudah dimainkan. WebView menangkap request
+        // .m3u8/.mp4 (iklan dibuang lewat regex) dan skrip kecil mencoba menekan tombol putar.
         val seen = HashSet<String>()
-        for ((srv, url) in servers.take(3)) {
+        for ((srv, url) in embeds.take(3)) {
             val found = try {
-                app.get(url, referer = "$mainUrl/", interceptor = WebViewResolver(MEDIA_RE)).url
+                app.get(
+                    url, referer = "$mainUrl/",
+                    interceptor = WebViewResolver(MEDIA_RE, script = AUTOPLAY_JS)
+                ).url
             } catch (e: Exception) {
                 Log.w(TAG, "webview $srv gagal: ${e.javaClass.simpleName}")
                 continue
             }
-            if (!MEDIA_RE.containsMatchIn(found) || !seen.add(found)) continue
+            if (!MEDIA_RE.containsMatchIn(found) || !seen.add(found)) {
+                Log.w(TAG, "webview $srv: tidak ada media")
+                continue
+            }
             val q = Regex("""(?<!\d)(2160|1440|1080|720|480|360)(?!\d)""").find(found)?.value?.toIntOrNull()
             callback.invoke(
                 newExtractorLink(name, "$name $srv", found,
@@ -194,12 +252,21 @@ class SFlixProvider : MainAPI() {
             ok = true
             break
         }
-        if (!ok) throw ErrorLoadingException("Tautan tidak ditemukan [$name] server: " + servers.joinToString { it.first })
+        if (!ok) throw ErrorLoadingException("Tautan tidak ditemukan [$name] embed: " + embeds.joinToString { it.second.take(50) })
         return true
     }
 
     private companion object {
         const val TAG = "SFlixProvider"
-        val MEDIA_RE = Regex("""(?i)\.(m3u8|mp4)(\?|$)""")
+        // media asli saja: buang host iklan yang juga memuat .mp4
+        val MEDIA_RE = Regex("""(?i)^(?!.*(?:onclickperformance|doubleclick|googlesyndication|adsterra|popads)).*\.(?:m3u8|mp4)(?:\?|$)""")
+        // dijalankan sekali setelah halaman dimuat: coba tekan tombol putar secara berkala (maks 25 dtk)
+        const val AUTOPLAY_JS = "(function(){var n=0;var t=setInterval(function(){n++;" +
+            "var b=document.querySelector('.jw-icon-display,.jw-display-icon-container,.vjs-big-play-button,button[aria-label*=\"lay\"]');" +
+            "if(b){try{b.click()}catch(e){}}" +
+            "var v=document.querySelector('video');if(v){try{v.muted=true;v.play()}catch(e){}}" +
+            "if(n>30)clearInterval(t)},800)})();"
+        val PL_URL_RE = Regex("""pl_url\s*=\s*['"]([^'"]+)['"]""")
+        val CURRENT_URL_RE = Regex("""current_url\s*=\s*['"]([^'"]+)['"]""")
     }
 }
