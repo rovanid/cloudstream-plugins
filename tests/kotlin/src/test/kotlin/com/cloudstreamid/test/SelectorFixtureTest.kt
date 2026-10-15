@@ -105,9 +105,53 @@ class SelectorFixtureTest {
             val sep = Regex("\\r?\\n\\r?\\n").find(part) ?: continue
             val headers = part.substring(0, sep.range.first)
             if (!Regex("(?i)content-type:\\s*text/html").containsMatchIn(headers)) continue
-            return part.substring(sep.range.last + 1)
+            return decodePart(headers, part.substring(sep.range.last + 1))
         }
         return raw
+    }
+
+    /**
+     * Dekode isi bagian MIME sesuai Content-Transfer-Encoding. Chrome memakai quoted-printable untuk sebagian
+     * situs (atribut tampil sebagai `class=3D"x"`, baris dipotong `=` + newline) dan `binary` untuk yang lain.
+     * Sama dengan _decode_part di .github/scripts/fixture_utils.py.
+     */
+    private fun decodePart(headers: String, body: String): String {
+        val cte = Regex("(?i)content-transfer-encoding:\\s*([\\w-]+)").find(headers)
+            ?.groupValues?.get(1)?.lowercase() ?: ""
+        val charsetName = Regex("(?i)charset\\s*=\\s*\"?([\\w.:-]+)").find(headers)?.groupValues?.get(1) ?: "utf-8"
+        val charset = try {
+            java.nio.charset.Charset.forName(charsetName)
+        } catch (e: Exception) {
+            Charsets.UTF_8
+        }
+        return when (cte) {
+            "quoted-printable" -> String(decodeQuotedPrintable(body), charset)
+            "base64" -> String(java.util.Base64.getMimeDecoder().decode(body.trim()), charset)
+            else -> body
+        }
+    }
+
+    private fun decodeQuotedPrintable(s: String): ByteArray {
+        val out = java.io.ByteArrayOutputStream(s.length)
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            if (c == '=') {
+                if (i + 1 < s.length && s[i + 1] == '\n') { i += 2; continue }                      // soft break LF
+                if (i + 2 < s.length && s[i + 1] == '\r' && s[i + 2] == '\n') { i += 3; continue } // soft break CRLF
+                if (i + 2 < s.length) {
+                    val h = Character.digit(s[i + 1], 16)
+                    val l = Character.digit(s[i + 2], 16)
+                    if (h >= 0 && l >= 0) { out.write(h * 16 + l); i += 3; continue }
+                }
+                out.write('='.code)
+                i++
+            } else {
+                if (c.code < 128) out.write(c.code) else out.write(c.toString().toByteArray(Charsets.UTF_8))
+                i++
+            }
+        }
+        return out.toByteArray()
     }
 
     @TestFactory
