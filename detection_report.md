@@ -9,3 +9,4 @@ Tidak diproses / gagal:
 
 - **AnimeSailProvider**: dikunci manual
 - **KuramanimeProvider**: dikunci manual
+- **SFlixProvider**: dikunci manual
